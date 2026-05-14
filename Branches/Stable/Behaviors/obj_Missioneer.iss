@@ -60,8 +60,9 @@ objectdef obj_Missioneer inherits obj_BaseClass
 		{
 			This.CurrentState:Set["IDLE"]
 		}
-		elseif ${This.CurentState.Equal["RUN_MISSION"]}
+		elseif ${This.CurrentState.Equal["RUN_MISSION"]} && ${Agents.HaveMission}
 		{
+			; Stay in RUN_MISSION state while we still have a mission to run
 			return
 		}
 		elseif ${Agents.HaveMission}

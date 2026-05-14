@@ -283,6 +283,8 @@ objectdef obj_JetCan inherits obj_BaseClass
 		if ${EVEWindow[Inventory].ChildWindow[${ID}](exists)}
 		{
 			EVEWindow[Inventory].ChildWindow[${ID}]:MakeActive
+			; Wait after MakeActive to prevent "Inventory access too soon" errors (300ms)
+			wait 3
 			return TRUE
 		}
 		else

@@ -71,10 +71,11 @@ objectdef obj_EVEWindow_Proxy
 
 /*
   ~ ChildWindow[ID#]                     :: the first child with the given ID#
-  ~ ChildWindow["NAME"]                  :: the first child with the given "NAME"
-  ~ ChildWindow["NAME","LOCATION"]       :: the child with the given "NAME" at the given "LOCATION"
-  ~ ChildWindow[ID#,"NAME"]              :: the child with the given ID# and the given "NAME"
+  ~ ChildWindow[ID#,"NAME"]              :: the child with the given ID# and the given "NAME" (PREFERRED)
   ~ ChildWindow[ID#,"NAME","LOCATION"]   :: the child with the given ID# and "NAME", at the given "LOCATION"
+
+	NOTE: The name-only patterns (ChildWindow["NAME"] and ChildWindow["NAME","LOCATION"]) are
+	DEPRECATED in ISXEVE and will cause console spam. Always include an ID#.
 
 	If ID is not specified, but Name is, MyShip.ID is assumed
 	Note that some window types REQUIRE an ID. These will cause an error message to be printed instead of defaulting to MyShip.ID
@@ -122,7 +123,8 @@ objectdef obj_EVEWindow_Proxy
 
 		if ${This.InvName.Equal[StationItems]}
 		{
-			if ${Me.InStructure}
+			; Check if we're in a structure by checking if StructureItemHangar window exists
+			if ${Me.InStation} && ${EVEWindow[Inventory].ChildWindow[${Me.StationID}, StructureItemHangar](exists)}
 			{
 				Logger:Log["Inventory.${This.ObjectName}: Structure detected, switching InvName", LOG_DEBUG]
 				This.InvName:Set[StructureItemHangar]
@@ -131,7 +133,7 @@ objectdef obj_EVEWindow_Proxy
 		elseif ${This.InvName.Equal[StructureItemHangar]}
 		{
 			; Check for if we visited a structure and are now at a station, so we have to use original
-			if !${Me.InStructure}
+			if ${Me.InStation} && !${EVEWindow[Inventory].ChildWindow[${Me.StationID}, StructureItemHangar](exists)}
 			{
 				Logger:Log["Inventory.${This.ObjectName}: Station detected, switching InvName", LOG_DEBUG]
 				This.InvName:Set[StationItems]
@@ -139,7 +141,8 @@ objectdef obj_EVEWindow_Proxy
 		}
 		elseif ${This.InvName.Equal[StationShips]}
 		{
-			if ${Me.InStructure}
+			; Check if we're in a structure by checking if StructureShipHangar window exists
+			if ${Me.InStation} && ${EVEWindow[Inventory].ChildWindow[${Me.StationID}, StructureShipHangar](exists)}
 			{
 				Logger:Log["Inventory.${This.ObjectName}: Structure detected, switching InvName", LOG_DEBUG]
 				This.InvName:Set[StructureShipHangar]
@@ -148,7 +151,7 @@ objectdef obj_EVEWindow_Proxy
 		elseif ${This.InvName.Equal[StructureShipHangar]}
 		{
 			; Check for if we visited a structure and are now at a station, so we have to use original
-			if !${Me.InStructure}
+			if ${Me.InStation} && !${EVEWindow[Inventory].ChildWindow[${Me.StationID}, StructureShipHangar](exists)}
 			{
 				Logger:Log["Inventory.${This.ObjectName}: Station detected, switching InvName", LOG_DEBUG]
 				This.InvName:Set[StationShips]
@@ -171,7 +174,7 @@ objectdef obj_EVEWindow_Proxy
 			return FALSE
 		}
 
-		if ${Inventory.${This.ObjectName}.IsActve}
+		if ${Inventory.${This.ObjectName}.IsActive}
 		{
 			Logger:Log["\arInventory.${This.ObjectName}: Already active", LOG_DEBUG]
 			return TRUE
@@ -180,16 +183,18 @@ objectdef obj_EVEWindow_Proxy
 
 		Inventory.${This.ObjectName}:MakeActive
 		variable int Count = 0
-		wait 8
+		; Wait after MakeActive to ensure window is ready before checking IsCurrent (300ms)
+		wait 3
 		do
 		{
-			; Wait 5 seconds, a tenth at a time
+			; Wait up to 5 seconds for window to become current
 			wait 1
 			if ${This.IsCurrent}
 			{
 				;Logger:Log["\t\ayInventory.${This.ObjectName}: MakeActive true after ${Count} waits", LOG_STANDARD]
 				Inventory.Current:SetReference[This]
-				wait 5
+				; Wait after window becomes current to ensure it's fully ready (200ms)
+				wait 2
 				return TRUE
 			}
 
@@ -273,8 +278,11 @@ objectdef obj_EVEWindow_Proxy
 
 	function Stack()
 	{
+		; Wait before StackAll to ensure window is active and ready (200ms)
+		wait 2
 		Inventory.${This.ObjectName}:StackAll
-		wait 20
+		; Wait after StackAll before returning to prevent timing issues (200ms)
+		wait 2
 	}
 
 	method DebugPrintInvData()
@@ -384,6 +392,93 @@ objectdef obj_Inventory inherits obj_BaseClass
 		EVEWindow[Inventory]:Close
 	}
 
+	; Delegates Stack() to the currently active inventory window
+	; This allows calling "call Inventory.Current.Stack" to work correctly
+	function Stack()
+	{
+		if ${Inventory.ShipCargo.IsCurrent}
+		{
+			call Inventory.ShipCargo.Stack
+		}
+		elseif ${Inventory.ShipFleetHangar.IsCurrent}
+		{
+			call Inventory.ShipFleetHangar.Stack
+		}
+		elseif ${Inventory.ShipGeneralMiningHold.IsCurrent}
+		{
+			call Inventory.ShipGeneralMiningHold.Stack
+		}
+		elseif ${Inventory.ShipDroneBay.IsCurrent}
+		{
+			call Inventory.ShipDroneBay.Stack
+		}
+		elseif ${Inventory.StationHangar.IsCurrent}
+		{
+			call Inventory.StationHangar.Stack
+		}
+		elseif ${Inventory.StationCorpHangars.IsCurrent}
+		{
+			call Inventory.StationCorpHangars.Stack
+		}
+		elseif ${Inventory.CorporationDeliveries.IsCurrent}
+		{
+			call Inventory.CorporationDeliveries.Stack
+		}
+		elseif ${Inventory.EntityFleetHangar.IsCurrent}
+		{
+			call Inventory.EntityFleetHangar.Stack
+		}
+		else
+		{
+			Logger:Log["${LogPrefix}.Stack: No current inventory window active", LOG_WARNING]
+		}
+	}
+
+	; Delegates GetItems to the currently active inventory window
+	; This allows calling "Inventory.Current:GetItems[...]" to work correctly
+	method GetItems(weakref ItemIndex, string QueryFilter)
+	{
+		if ${Inventory.ShipCargo.IsCurrent}
+		{
+			Inventory.ShipCargo:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		elseif ${Inventory.ShipFleetHangar.IsCurrent}
+		{
+			Inventory.ShipFleetHangar:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		elseif ${Inventory.ShipGeneralMiningHold.IsCurrent}
+		{
+			Inventory.ShipGeneralMiningHold:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		elseif ${Inventory.ShipDroneBay.IsCurrent}
+		{
+			Inventory.ShipDroneBay:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		elseif ${Inventory.StationHangar.IsCurrent}
+		{
+			Inventory.StationHangar:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		elseif ${Inventory.StationCorpHangars.IsCurrent}
+		{
+			Inventory.StationCorpHangars:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		elseif ${Inventory.CorporationDeliveries.IsCurrent}
+		{
+			Inventory.CorporationDeliveries:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		elseif ${Inventory.EntityFleetHangar.IsCurrent}
+		{
+			Inventory.EntityFleetHangar:GetItems[ItemIndex, "${QueryFilter}"]
+		}
+		else
+		{
+			Logger:Log["${LogPrefix}.GetItems: No current inventory window active", LOG_WARNING]
+		}
+	}
+
+	; NOTE: Items() member removed - cannot return index:item from member function
+	; Use GetItems[weakref, query] to populate an index:item instead
+
 	; Returns FALSE/0, or the ID of the opened entity
 	function OpenEntityFleetHangar(int64 ID)
 	{
@@ -443,8 +538,8 @@ ShipDroneBay itemid flagDroneBay 87
 
 * The "container" entry within the eveinventorywindow with the label "Corporation hangars" is now accessible and must be
   made active before the individual corporation folders are available.  For example:
-	if !${EVEWindow[Inventory].ChildWindow[StationCorpHangar, "Folder1"](exists)}
-		EVEWindow[Inventory].ChildWindow[StationCorpHangars]:MakeActive
+	if !${EVEWindow[Inventory].ChildWindow[${Me.StationID}, StationCorpHangar, "Folder1"](exists)}
+		EVEWindow[Inventory].ChildWindow[${Me.StationID}, StationCorpHangars]:MakeActive
 
 TODO
  Find all :Open and :GetCargo or .*Cargo[..] calls for Entity-based work.

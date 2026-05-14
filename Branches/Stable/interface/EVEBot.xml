@@ -871,6 +871,7 @@
 								<Item Value='6'>Orca</Item>
 								<Item Value='7'>No Delivery</Item>
 								<Item Value='8'>Compression Array</Item>
+								<Item Value='9'>Station Corp Hangar</Item>
 							</Items>
 							<OnSelect>
 								Script[EVEBot].VariableScope.Config.Miner:SetDeliveryLocationType[${This.SelectedItem.Value}]

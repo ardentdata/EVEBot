@@ -26,6 +26,8 @@ objectdef obj_Miner
 	; Used to force compression when compression is active
 	variable bool ForceCompress = FALSE
 	variable bool StopCompressing = FALSE
+	; Flag to signal compression request from atomic event handler (cannot call wait from atoms)
+	variable bool CompressionRequested = FALSE
 
 	;	Are we running out of asteroids to target?
 	variable bool ConcentrateFire = FALSE
@@ -54,6 +56,16 @@ objectdef obj_Miner
 	;	Search string for our Master
 	variable string Master
 
+	;	FLEE state machine variables
+	variable string FleeSubState = ""
+	variable time FleeStateStartTime
+	variable obj_PulseTimer FleeActionTimer
+	variable int64 FleeTargetID = 0
+	variable bool FleeAlignmentStarted = FALSE
+	variable int LastDroneCount = 0
+	variable time DronesLastProgressTime
+	variable int FleeDroneTimeout = 120
+
 /*
 ;	Step 1:  	Get the module ready.  This includes init and shutdown methods, as well as the pulse method that runs each frame.
 ;				Adjust PulseIntervalInSeconds above to determine how often the module will SetState.
@@ -81,6 +93,7 @@ objectdef obj_Miner
 		LavishScript:RegisterEvent[EVEBOT_Compression_Off]
         Event[EVEBOT_Compression_Off]:AttachAtom[This:Event_NoCompression]
 
+		FleeActionTimer:SetIntervals[2.0,3.0]
 		Logger:Log["obj_Miner: Initialized", LOG_MINOR]
 	}
 
@@ -105,6 +118,14 @@ objectdef obj_Miner
 		{
 			; There's no reason at all for the miner to check state if it's not a miner
 			return
+		}
+
+		; Check if compression was requested from event (outside atomic context)
+		; This allows the event handler to be an atom without using 'wait' commands
+		if ${CompressionRequested}
+		{
+			CompressionRequested:Set[FALSE]
+			ForceCompress:Set[TRUE]
 		}
 
 	    if ${Time.Timestamp} >= ${This.NextPulse.Timestamp}
@@ -422,76 +443,192 @@ objectdef obj_Miner
 			;	*	Otherwise, check if we're warping and warp to a safe spot
 			;	*	If none of these work, something is terribly wrong, and we need to panic!
 			case FLEE
-				;	Before we go anywhere, make a bookmark so we can get back here
+				; Already safe in station - reset and stay
 				if ${Me.InStation}
 				{
+					This.FleeSubState:Set[""]
+					This.FleeAlignmentStarted:Set[FALSE]
 					break
 				}
-				Ship.Drones:ReturnAllToDroneBay["Miner", "Flee"]
-				if ${EVE.Bookmark[${Config.Miner.DeliveryLocation}](exists)} && ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].SolarSystemID} == ${Me.SolarSystemID}
+
+				; Initialize FLEE state on first entry
+				if ${This.FleeSubState.Equal[""]}
 				{
-					if ${Config.Miner.BookMarkLastPosition} && !${Bookmarks.CheckForStoredLocation}
-					{
-						Bookmarks:StoreLocation
-					}
-
-					;call This.FastWarp ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].ItemID}
-					Logger:Log["Debug: Station.DockAtStation called from Line _LINE_ ", LOG_DEBUG]
-					call Station.DockAtStation ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].ItemID}
-					break
+					This.FleeSubState:Set["INIT"]
+					This.FleeStateStartTime:Set[${Time.Timestamp}]
+					This.FleeActionTimer:Expire
+					This.FleeAlignmentStarted:Set[FALSE]
+					This.FleeTargetID:Set[0]
+					This.LastDroneCount:Set[0]
 				}
-				if ${EVE.Bookmark[${Config.Miner.PanicLocation}](exists)} && ${EVE.Bookmark[${Config.Miner.PanicLocation}].SolarSystemID} == ${Me.SolarSystemID}
+
+				switch ${This.FleeSubState}
 				{
-					if ${Config.Miner.BookMarkLastPosition} && !${Bookmarks.CheckForStoredLocation}
-					{
-						Bookmarks:StoreLocation
-					}
+					case INIT
+						; Store bookmark before we leave
+						if ${Config.Miner.BookMarkLastPosition} && !${Bookmarks.CheckForStoredLocation}
+						{
+							Bookmarks:StoreLocation
+						}
 
-					if ${EVE.Bookmark[${Config.Miner.PanicLocation}](exists)} && ${EVE.Bookmark[${Config.Miner.PanicLocation}].TypeID} != 5
-					{
-						;call This.FastWarp ${EVE.Bookmark[${Config.Miner.PanicLocation}].ItemID}
-						Logger:Log["Debug: Station.DockAtStation called from Line _LINE_ ", LOG_DEBUG]
-						call Station.DockAtStation ${EVE.Bookmark[${Config.Miner.PanicLocation}].ItemID}
-					}
-					else
-					{
-						Logger:Log["Debug: FastWarp to ${Config.Miner.PanicLocation} from Line _LINE_ ", LOG_DEBUG]
-						call This.FastWarp -1 "${Config.Miner.PanicLocation}"
-					}
-					break
+						; Determine where we're fleeing TO (priority order)
+						if ${EVE.Bookmark[${Config.Miner.DeliveryLocation}](exists)} && ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].SolarSystemID} == ${Me.SolarSystemID}
+						{
+							This.FleeTargetID:Set[${EVE.Bookmark[${Config.Miner.DeliveryLocation}].ItemID}]
+							Logger:Log["FLEE: Target set to delivery location"]
+						}
+						elseif ${EVE.Bookmark[${Config.Miner.PanicLocation}](exists)} && ${EVE.Bookmark[${Config.Miner.PanicLocation}].SolarSystemID} == ${Me.SolarSystemID}
+						{
+							if ${EVE.Bookmark[${Config.Miner.PanicLocation}].TypeID} != 5
+							{
+								This.FleeTargetID:Set[${EVE.Bookmark[${Config.Miner.PanicLocation}].ItemID}]
+								Logger:Log["FLEE: Target set to panic location (station)"]
+							}
+							else
+							{
+								This.FleeTargetID:Set[-1]
+								Logger:Log["FLEE: Target set to panic location (bookmark)"]
+							}
+						}
+						elseif ${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"](exists)}
+						{
+							This.FleeTargetID:Set[${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"].ID}]
+							Logger:Log["FLEE: Target set to nearby station: ${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"].Name}"]
+						}
+						else
+						{
+							Logger:Log["FLEE: No station found, will use safespot", LOG_WARNING]
+						}
+
+						This.FleeSubState:Set["RECALL_DRONES"]
+						break
+
+					case RECALL_DRONES
+						; GOAL #2: Start alignment IMMEDIATELY (same frame as drone recall)
+						if !${This.FleeAlignmentStarted}
+						{
+							if ${This.FleeTargetID} > 0 && ${Entity[${This.FleeTargetID}](exists)}
+							{
+								Logger:Log["FLEE: Aligning to ${Entity[${This.FleeTargetID}].Name} while recalling drones"]
+								Entity[${This.FleeTargetID}]:AlignTo
+								This.FleeAlignmentStarted:Set[TRUE]
+							}
+						}
+
+						; GOAL #1: Check if we have drones to recall
+						if ${Ship.Drones.DronesInSpace[FALSE]} == 0
+						{
+							Logger:Log["FLEE: No drones in space, ready for warp"]
+							This.FleeSubState:Set["WARP"]
+							break
+						}
+
+						; Issue return command (rate-limited by timer)
+						if ${This.FleeActionTimer.Ready}
+						{
+							Logger:Log["FLEE: Recalling ${Ship.Drones.DronesInSpace[FALSE]} drones..."]
+							Ship.Drones:ReturnAllToDroneBay["Miner", "Flee"]
+							This.FleeActionTimer:Update
+						}
+
+						This.FleeSubState:Set["WAIT_DRONES"]
+						break
+
+					case WAIT_DRONES
+						; Track drone count over time
+						variable int TimeElapsed = ${Math.Calc[${Time.Timestamp} - ${This.FleeStateStartTime.Timestamp}]}
+						variable int CurrentDrones = ${Ship.Drones.DronesInSpace[FALSE]}
+
+						; SMART DETECTION #1: All drones in bay - proceed immediately
+						if ${CurrentDrones} == 0
+						{
+							Logger:Log["FLEE: All drones safely in bay after ${TimeElapsed}s"]
+							This.FleeSubState:Set["WARP"]
+							break
+						}
+
+						; SMART DETECTION #2: Track progress (drone count decreasing)
+						if ${CurrentDrones} < ${This.LastDroneCount}
+						{
+							This.LastDroneCount:Set[${CurrentDrones}]
+							This.DronesLastProgressTime:Set[${Time.Timestamp}]
+							Logger:Log["FLEE: Progress - ${CurrentDrones} drones remaining", LOG_DEBUG]
+						}
+
+						; Initialize progress tracking on first check
+						if ${This.LastDroneCount} == 0
+						{
+							This.LastDroneCount:Set[${CurrentDrones}]
+							This.DronesLastProgressTime:Set[${Time.Timestamp}]
+						}
+
+						; SMART DETECTION #3: No progress timeout (drones stuck/destroyed)
+						variable int TimeSinceProgress = ${Math.Calc[${Time.Timestamp} - ${This.DronesLastProgressTime.Timestamp}]}
+						if ${TimeSinceProgress} > 45 && ${TimeElapsed} > 45
+						{
+							Logger:Log["FLEE: CRITICAL - No drone return progress for 45s, ${CurrentDrones} drones stuck or destroyed - ABANDONING", LOG_CRITICAL]
+							Logger:Log["FLEE: Time elapsed: ${TimeElapsed}s, Last progress: ${TimeSinceProgress}s ago", LOG_CRITICAL]
+							This.FleeSubState:Set["WARP"]
+							break
+						}
+
+						; FALLBACK TIMEOUT: Configurable (default 120s)
+						if ${TimeElapsed} > ${This.FleeDroneTimeout}
+						{
+							Logger:Log["FLEE: CRITICAL - ${TimeElapsed}s timeout reached (max: ${This.FleeDroneTimeout}s), abandoning ${CurrentDrones} drones", LOG_CRITICAL]
+							Logger:Log["FLEE: Last progress: ${TimeSinceProgress}s ago", LOG_CRITICAL]
+							This.FleeSubState:Set["WARP"]
+							break
+						}
+
+						; Log status periodically (every 15s)
+						if ${Math.Calc[${TimeElapsed} % 15]} == 0
+						{
+							Logger:Log["FLEE: Waiting for ${CurrentDrones} drones (${TimeElapsed}s elapsed, progress: ${TimeSinceProgress}s ago)", LOG_DEBUG]
+						}
+
+						; Continue recall attempts (rate-limited)
+						if ${This.FleeActionTimer.Ready}
+						{
+							Logger:Log["FLEE: Re-issuing drone recall (${CurrentDrones} remaining)...", LOG_DEBUG]
+							Ship.Drones:ReturnAllToDroneBay["Miner", "Flee Retry"]
+							This.FleeActionTimer:Update
+						}
+						break
+
+					case WARP
+						; GOAL #1: Final drone verification
+						if ${Ship.Drones.DronesInSpace[FALSE]} > 0
+						{
+							Logger:Log["FLEE: WARNING - Drones detected in space at WARP state, returning to WAIT", LOG_WARNING]
+							This.FleeSubState:Set["WAIT_DRONES"]
+							break
+						}
+
+						; Initiate warp/dock
+						if ${This.FleeTargetID} > 0 && ${Entity[${This.FleeTargetID}](exists)}
+						{
+							Logger:Log["FLEE: Docking at ${Entity[${This.FleeTargetID}].Name}"]
+							call Station.DockAtStation ${This.FleeTargetID}
+						}
+						else
+						{
+							Logger:Log["FLEE: Warping to safespot"]
+							call Safespots.WarpTo
+							call This.FastWarp
+						}
+
+						; Reset state
+						This.FleeSubState:Set[""]
+						This.FleeAlignmentStarted:Set[FALSE]
+						break
 				}
-
-				if ${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"](exists)}
-				{
-					if ${Config.Miner.BookMarkLastPosition} && !${Bookmarks.CheckForStoredLocation}
-					{
-						Bookmarks:StoreLocation
-					}
-
-					Logger:Log["Docking at ${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"].Name}"]
-					;call This.FastWarp ${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"].ID}
-					Logger:Log["Debug: Station.DockAtStation called from Line _LINE_ ", LOG_DEBUG]
-					call Station.DockAtStation ${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"].ID}
-					break
-				}
-
-				if ${Me.ToEntity.Mode} != 3
-				{
-					Logger:Log["Debug: Safespots.WarpTo called from Line _LINE_ ", LOG_DEBUG]
-					call Safespots.WarpTo
-					Logger:Log["Debug: FastWarp called from Line _LINE_ ", LOG_DEBUG]
-					call This.FastWarp
-					wait 30
-					break
-				}
-
-				Logger:Log["HARD STOP: Unable to flee, no stations available and no Safe spots available"]
-				EVEBot.ReturnToStation:Set[TRUE]
 				break
 
 			;	This means we're in a station and need to do what we need to do and leave.
 			;	*	If this isn't where we're supposed to deliver ore, we need to leave the station so we can go to the right one.
 			;	*	Move ore out of cargo hold if it's there
+			;	*	If in GroupMode, wait for Fleet Master to be in belt before undocking
 			;	*	Undock from station
 			case BASE
 				if ${EVE.Bookmark[${Config.Miner.DeliveryLocation}](exists)} && ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].ItemID} != ${Me.StationID}
@@ -504,6 +641,14 @@ objectdef obj_Miner
 				call Cargo.TransferCargoFromShipGeneralMiningHoldToStation
 
 				LastUsedCargoCapacity:Set[0]
+
+				; Wait for Fleet Master to be in belt before undocking (if in GroupMode)
+				if ${Config.Miner.GroupMode} && !${EVEBot.IsMaster} && !${WarpToMaster}
+				{
+					Logger:Log["Waiting in station for Fleet Master to be in belt..."]
+					break
+				}
+
 				call Station.Undock
 				wait 600 ${Me.InSpace}
 				break
@@ -744,7 +889,7 @@ objectdef obj_Miner
 
 						if ${Entity[${Orca.Escape}](exists)} && ${Entity[${Orca.Escape}].Distance} <= LOOT_RANGE
 						{
-							call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}]}
+							call Cargo.TransferCompressedOreToShipFleetHangar ${Entity[${Orca.Escape}]}
 						}
 
 						break
@@ -788,8 +933,11 @@ objectdef obj_Miner
 		; lets stack our ore
 		if (${StopCompressing} && ${Ship.OreHoldTenthFull} && ${Config.Miner.CompressOreMode})
 		{
-			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold]:MakeActive
-			EVEWindow["Inventory"]:StackAll
+			; Stack ore hold - eliminated unnecessary MakeActive and wait
+			if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
+			{
+				EVEWindow[Inventory]:StackAll
+			}
 			relay all -event EVEBOT_Compression_Off FALSE
 			StopCompressing:Set[FALSE]
 		}
@@ -965,9 +1113,60 @@ objectdef obj_Miner
 
 			if (${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)} && ${Ship.OreHoldHalfFull}) || ${Ship.CargoTenthFull}
 			{
-					Logger:Log["Emptying ore to ${Entity[${Orca.Escape}].Name}'s Corporate Hangars"]
-					call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}].ID}
-					call Cargo.ReplenishCrystals ${Entity[${Orca.Escape}].ID}
+					; Check if we actually have compressed ore to transfer
+					variable index:item AllOreItems
+					variable iterator OreIterator
+					variable int CompressedCount = 0
+
+					; Check cargo hold - get all ore items, then filter for compressed
+					Inventory.ShipCargo:GetItems[AllOreItems, "CategoryID == CATEGORYID_ORE"]
+
+					if ${AllOreItems.Used} > 0
+					{
+						AllOreItems:GetIterator[OreIterator]
+						if ${OreIterator:First(exists)}
+						{
+							do
+							{
+								if ${OreIterator.Value.Name.Find["Compressed"]} > 0
+								{
+									CompressedCount:Inc
+								}
+							}
+							while ${OreIterator:Next(exists)}
+						}
+					}
+
+					; If not found in cargo, check mining hold
+					if ${CompressedCount} == 0
+					{
+						AllOreItems:Clear
+						Inventory.ShipGeneralMiningHold:GetItems[AllOreItems, "CategoryID == CATEGORYID_ORE"]
+
+						if ${AllOreItems.Used} > 0
+						{
+							AllOreItems:GetIterator[OreIterator]
+							if ${OreIterator:First(exists)}
+							{
+								do
+								{
+									if ${OreIterator.Value.Name.Find["Compressed"]} > 0
+									{
+										CompressedCount:Inc
+									}
+								}
+								while ${OreIterator:Next(exists)}
+							}
+						}
+					}
+
+					; Transfer compressed ore to Orca if found
+					if ${CompressedCount} > 0
+					{
+						Logger:Log["Emptying ${CompressedCount} compressed ore item(s) to ${Entity[${Orca.Escape}].Name}'s Fleet Hangar"]
+						call Cargo.TransferCompressedOreToShipFleetHangar ${Entity[${Orca.Escape}].ID}
+						call Cargo.ReplenishCrystals ${Entity[${Orca.Escape}].ID}
+					}
 			}
 
 		}
@@ -1132,63 +1331,16 @@ objectdef obj_Miner
 			}
 		}
 
-		;	Here is where we lock new asteroids.  We always want to do this if we have no asteroids locked.  If we have at least one asteroid locked, however,
-		;	we should only lock more asteroids if we're not ice mining
-		if ((!${Config.Miner.DistributeLasers} || ${Config.Miner.IceMining}) && ${Asteroids.LockedAndLocking} == 0) || \
-			((${Config.Miner.DistributeLasers} && !${Config.Miner.IceMining}) && ${Asteroids.LockedAndLocking} < ${Ship.SafeMaxLockedTargets})
-		{
-			;	Calculate how many asteroids we need
-			variable int AsteroidsNeeded=${Ship.TotalMiningLasers}
-
-			;	If we're supposed to use Mining Drones, we need one more asteroid
-			if ${Config.Miner.UseMiningDrones}
-			{
-				AsteroidsNeeded:Inc
-			}
-			if ${Config.Miner.IceMining}
-			{
-				AsteroidsNeeded:Set[1]
-			}
-			;	So we need to lock another asteroid.  First make sure that our ship can lock another, and make sure
-			;	we don't already have enough asteroids locked. The Asteroids.TargetNext function will let us know if
-			;	we need to concentrate fire because we're out of new asteroids to target. If we're using an orca and
-			;	it's in the belt, use Asteroids.TargetNextInRange to only target roids nearby
-			if (${Ship.TotalTargeting} < ${Ship.SafeMaxLockedTargets}) && ${Asteroids.LockedAndLocking} < ${AsteroidsNeeded}
-			{
-				if ${Config.Miner.DeliveryLocationTypeName.Equal[Orca]} && ${Entity[${Orca.Escape}](exists)}
-				{
-					call Asteroids.TargetNextInRange ${Entity[${Orca.Escape}].ID}
-				}
-				elseif ${Config.Miner.GroupMode} && ${Config.Miner.GroupModeAtRange}
-				{
-					call Asteroids.TargetNextInRange ${Entity[${Master.Escape}].ID}
-				}
-				else
-				{
-					call Asteroids.TargetNext
-				}
-				This.ConcentrateFire:Set[!${Return}]
-				if ${Return}
-				{
-					return
-				}
-			}
-
-			;	We don't need to lock another asteroid.  Let's find out if we need to signal a concentrate fire based on limitations of our ship.
-			;	Either our target count more than we can safely lock, or we have more mining lasers than we can safely lock.
-			else
-			{
-				if ${Asteroids.LockedAndLocking} >= ${Ship.SafeMaxLockedTargets} &&  ${Ship.TotalMiningLasers} > ${Ship.SafeMaxLockedTargets}
-				{
-					This.ConcentrateFire:Set[TRUE]
-				}
-			}
-		}
-
 		;	Time to get those lasers working!
+		;	ACTIVATION PHASE: Activate lasers on existing locked asteroids BEFORE locking new ones
+		;	This ensures immediate activation when a buffer asteroid is available
 		if ${Ship.TotalActivatedMiningLasers} < ${Ship.TotalMiningLasers}
 		{
-			wait 200 ${Me.TargetingCount} == 0
+			; Only wait for targeting to complete if we have no locked asteroids available
+			if ${Me.TargetCount} == 0
+			{
+				wait 200 ${Me.TargetingCount} == 0
+			}
 			LockedTargets:Clear
 			Me:GetTargets[LockedTargets]
 			LockedTargets:GetIterator[Target]
@@ -1256,6 +1408,66 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 			while ${Target:Next(exists)}
 		}
 
+		;	TARGETING PHASE: Lock new asteroids after activating lasers on existing ones
+		;	Here is where we lock new asteroids.  We always want to do this if we have no asteroids locked.  If we have at least one asteroid locked, however,
+		;	we should only lock more asteroids if we're not ice mining
+		if ((!${Config.Miner.DistributeLasers} || ${Config.Miner.IceMining}) && ${Asteroids.LockedAndLocking} == 0) || \
+			((${Config.Miner.DistributeLasers} && !${Config.Miner.IceMining}) && ${Asteroids.LockedAndLocking} < ${Ship.SafeMaxLockedTargets})
+		{
+			;	Calculate how many asteroids we need
+			variable int AsteroidsNeeded=${Ship.TotalMiningLasers}
+
+			;	If we're supposed to use Mining Drones, we need one more asteroid
+			if ${Config.Miner.UseMiningDrones}
+			{
+				AsteroidsNeeded:Inc
+			}
+			if ${Config.Miner.IceMining}
+			{
+				AsteroidsNeeded:Set[1]
+			}
+			;	Add targeting buffer for non-ice mining to ensure we always have a reserve asteroid ready when one depletes
+			;	Only add buffer if we have room for more targets than lasers
+			elseif ${Ship.SafeMaxLockedTargets} > ${Ship.TotalMiningLasers}
+			{
+				AsteroidsNeeded:Inc
+			}
+			;	So we need to lock another asteroid.  First make sure that our ship can lock another, and make sure
+			;	we don't already have enough asteroids locked. The Asteroids.TargetNext function will let us know if
+			;	we need to concentrate fire because we're out of new asteroids to target. If we're using an orca and
+			;	it's in the belt, use Asteroids.TargetNextInRange to only target roids nearby
+			if (${Ship.TotalTargeting} < ${Ship.SafeMaxLockedTargets}) && ${Asteroids.LockedAndLocking} < ${AsteroidsNeeded}
+			{
+				if ${Config.Miner.DeliveryLocationTypeName.Equal[Orca]} && ${Entity[${Orca.Escape}](exists)}
+				{
+					call Asteroids.TargetNextInRange ${Entity[${Orca.Escape}].ID}
+				}
+				elseif ${Config.Miner.GroupMode} && ${Config.Miner.GroupModeAtRange}
+				{
+					call Asteroids.TargetNextInRange ${Entity[${Master.Escape}].ID}
+				}
+				else
+				{
+					call Asteroids.TargetNext
+				}
+				This.ConcentrateFire:Set[!${Return}]
+				if ${Return}
+				{
+					return
+				}
+			}
+
+			;	We don't need to lock another asteroid.  Let's find out if we need to signal a concentrate fire based on limitations of our ship.
+			;	Either our target count more than we can safely lock, or we have more mining lasers than we can safely lock.
+			else
+			{
+				if ${Asteroids.LockedAndLocking} >= ${Ship.SafeMaxLockedTargets} &&  ${Ship.TotalMiningLasers} > ${Ship.SafeMaxLockedTargets}
+				{
+					This.ConcentrateFire:Set[TRUE]
+				}
+			}
+		}
+
 		;	This checks to make sure there aren't any potential jet can flippers around before we dump a jetcan
 		if !${Social.PlayerInRange[10000]} && ${Config.Miner.DeliveryLocationTypeName.Equal["Jetcan"]}
 		{
@@ -1292,12 +1504,12 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 		}
 	}
 	;This method is triggered by an event. If triggered, it tells us that our miners are almost full and they need to compress.
+	;NOTE: This sets a flag rather than performing blocking operations. The actual compression logic is handled in the Pulse() method by checking the CompressionRequested flag.
 	method Event_Compression(bool Compression_On)
 	{
 		if (${Compression_On} && !${Config.Common.CurrentBehavior.Equal[Orca]})
 		{
-			Logger:Log["Debug: Lets Compress since the orca says we should be able to. "]
-			ForceCompress:Set[TRUE]
+			CompressionRequested:Set[TRUE]
 		}
 	}
 	;This method is triggered by an event. If triggered, it tells us that the compression array is off.

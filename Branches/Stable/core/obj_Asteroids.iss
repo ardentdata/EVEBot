@@ -22,6 +22,10 @@ objectdef obj_Asteroids
 	; List of asteroids claimed by other bots
 	variable set AsteroidList_Claimed
 
+	; Fallback timeout tracking - prevents deadlock when bots crash but claims persist
+	variable time FallbackStartTime
+	variable bool InFallbackMode = FALSE
+
 	variable index:bookmark BeltBookMarkList
 	variable iterator BeltBookMarkIterator
 	variable int64 LastBookMarkID
@@ -29,6 +33,11 @@ objectdef obj_Asteroids
 
 	variable int LastSurveyScanResultCount = 0
 	variable time LastSurveyScanResultTime
+	variable int LastAsteroidUsableCount = 0
+	variable int LastAsteroidInRangeCount = 0
+	variable int LastAsteroidOutOfRangeCount = 0
+	variable int LastAsteroidUnfilteredInRangeCount = 0
+	variable int64 LastAsteroidUpdateTimestamp = 0
 
 	method Initialize()
 	{
@@ -59,16 +68,26 @@ objectdef obj_Asteroids
 		if ${Time.Timestamp} >= ${This.NextPulse.Timestamp}
 		{
 			variable iterator ClaimedRoids
-			AsteroidList_Claimed:GetIterator[claimed]
+			variable index:string ClaimedToRemove
+			AsteroidList_Claimed:GetIterator[ClaimedRoids]
 
-			; Prune asteroids from the list that have poofed
+			; Collect asteroids from the list that have poofed
 			if ${ClaimedRoids:First(exists)}
 			do
 			{
 				if !${Entity[${ClaimedRoids.Value}](exists)}
 				{
-					AsteroidList_Claimed:Remove[${ClaimedRoids.Value}]
+					ClaimedToRemove:Insert[${ClaimedRoids.Value}]
 				}
+			}
+			while ${ClaimedRoids:Next(exists)}
+
+			; Remove outside the iteration loop to avoid iterator invalidation
+			ClaimedToRemove:GetIterator[ClaimedRoids]
+			if ${ClaimedRoids:First(exists)}
+			do
+			{
+				AsteroidList_Claimed:Remove[${ClaimedRoids.Value}]
 			}
 			while ${ClaimedRoids:Next(exists)}
 
@@ -200,8 +219,42 @@ objectdef obj_Asteroids
 			}
 			if ${AsteroidIterator.Value.IsLockedTarget} || ${AsteroidIterator.Value.BeingTargeted}
 			{
-				;Logger:Log["DEBUG: obj_Asteroids:NearestAsteroid: Skipping ${AsteroidIterator.Value.ID} (locked/beinglocked)", LOG_DEBUG]
-				continue
+				; Competition mode: check if this asteroid is locked by THIS bot
+				if ${IgnoreClaimedStatus}
+				{
+					variable bool isMyTarget = FALSE
+					variable index:entity CompeteCheckTargets
+					variable iterator CompeteCheckIterator
+
+					Me:GetTargets[CompeteCheckTargets]
+					CompeteCheckTargets:GetIterator[CompeteCheckIterator]
+
+					if ${CompeteCheckIterator:First(exists)}
+					{
+						do
+						{
+							if ${CompeteCheckIterator.Value.ID} == ${AsteroidIterator.Value.ID}
+							{
+								; This is OUR target - skip it
+								isMyTarget:Set[TRUE]
+								break
+							}
+						}
+						while ${CompeteCheckIterator:Next(exists)}
+					}
+
+					if ${isMyTarget}
+					{
+						; My own target - skip it
+						continue
+					}
+					; Someone else's target - allow it for competition
+				}
+				else
+				{
+					; Normal mode - skip all locked asteroids
+					continue
+				}
 			}
 			; Now check regular distance
 			if ${AsteroidIterator.Value.Distance} >= ${MaxDistance}
@@ -426,10 +479,21 @@ objectdef obj_Asteroids
 				}
 			}
 
+			LastAsteroidUsableCount:Set[${AsteroidList.Used}]
+			LastAsteroidInRangeCount:Set[${Count_InRange}]
+			LastAsteroidOutOfRangeCount:Set[${Count_OOR}]
+			LastAsteroidUnfilteredInRangeCount:Set[${AsteroidList_TotalIRTmp.Used}]
+			LastAsteroidUpdateTimestamp:Set[${Time.Timestamp}]
+
 			Logger:Log["obj_Asteroids:UpdateList: ${AsteroidList.Used} In Range: ${Count_InRange} OOR: ${Count_OOR} Unfiltered In Range: ${AsteroidList_TotalIRTmp.Used} asteroids found", LOG_DEBUG]
 		}
 		else
 		{
+			LastAsteroidUsableCount:Set[0]
+			LastAsteroidInRangeCount:Set[0]
+			LastAsteroidOutOfRangeCount:Set[0]
+			LastAsteroidUnfilteredInRangeCount:Set[0]
+			LastAsteroidUpdateTimestamp:Set[${Time.Timestamp}]
 			echo "WARNING: obj_Asteroids: Ore Type list is empty, please check config"
 		}
 	}
@@ -525,6 +589,74 @@ objectdef obj_Asteroids
 
 				return TRUE
 			}
+
+			; No unclaimed asteroid found - if claimed ones exist, compete for them
+			if ${AsteroidList_Claimed.Used} > 0
+			{
+				Logger:Log["obj_Asteroids: TargetNextInRange: No unclaimed asteroids - competing for ${AsteroidList_Claimed.Used} claimed asteroid(s)", LOG_WARNING]
+				This.AsteroidList:GetIterator[AsteroidIterator]
+				if ${AsteroidIterator:First(exists)}
+				{
+					do
+					{
+						if ${DistanceToTarget} == -1
+						{
+							if ${Entity[${AsteroidIterator.Value.ID}](exists)} && \
+								!${AsteroidIterator.Value.IsLockedTarget} && \
+								!${AsteroidIterator.Value.BeingTargeted} && \
+								${AsteroidIterator.Value.Distance} < ${MyShip.MaxTargetRange} && \
+								${AsteroidIterator.Value.Distance} < ${Ship.OptimalMiningRange}
+							{
+								break
+							}
+						}
+						else
+						{
+							if ${Entity[${AsteroidIterator.Value.ID}](exists)} && \
+								!${AsteroidIterator.Value.IsLockedTarget} && \
+								!${AsteroidIterator.Value.BeingTargeted} && \
+								${AsteroidIterator.Value.Distance} < ${MyShip.MaxTargetRange} && \
+								${AsteroidIterator.Value.DistanceTo[${DistanceToTarget}]} < ${Math.Calc[${Ship.OptimalMiningRange} + 2000]}
+							{
+								variable iterator Target2
+								variable bool IsWithinRangeOfOthers2=TRUE
+								Targets:UpdateLockedAndLockingTargets
+								Targets.LockedOrLocking:GetIterator[Target2]
+								if ${Target2:First(exists)}
+									do
+									{
+										if ${AsteroidIterator.Value.CategoryID} == ${Asteroids.AsteroidCategoryID}
+										{
+											if ${AsteroidIterator.Value.DistanceTo[${Target2.Value.ID}]} > ${Math.Calc[${Ship.OptimalMiningRange} * 2]}
+											{
+												IsWithinRangeOfOthers2:Set[FALSE]
+											}
+										}
+									}
+									while ${Target2:Next(exists)}
+								if ${IsWithinRangeOfOthers2}
+									break
+							}
+						}
+					}
+					while ${AsteroidIterator:Next(exists)}
+
+					if ${AsteroidIterator.Value(exists)} && ${Entity[${AsteroidIterator.Value.ID}](exists)}
+					{
+						if ${AsteroidIterator.Value.IsLockedTarget} || ${AsteroidIterator.Value.BeingTargeted}
+						{
+							return TRUE
+						}
+
+						relay all "Event[EVEBot_ClaimAsteroid]:Execute[${Me.ID}, ${AsteroidIterator.Value.ID}]"
+						Logger:Log["Locking Asteroid ${AsteroidIterator.Value.Name} (competition): ${EVEBot.MetersToKM_Str[${AsteroidIterator.Value.Distance}]}"]
+						AsteroidIterator.Value:LockTarget
+						Ship:Activate_SurveyScanner
+
+						return TRUE
+					}
+				}
+			}
 		}
 
 		return FALSE
@@ -547,10 +679,13 @@ objectdef obj_Asteroids
 			return FALSE
 		}
 
-		TargetAsteroid:Set[${This.NearestAsteroid[]}]
+		; Try to find the nearest unclaimed asteroid
+		TargetAsteroid:Set[${This.NearestAsteroid[0, FALSE]}]
+
+		; If no unclaimed asteroid found but claimed ones exist, compete for them
 		if ${TargetAsteroid} == -1 && ${AsteroidList_Claimed.Used} > 0
 		{
-			; Call again, ignoring claimed status. We'll all double up and get out of here faster
+			Logger:Log["obj_Asteroids: No unclaimed asteroids available - competing for ${AsteroidList_Claimed.Used} claimed asteroid(s)", LOG_WARNING]
 			TargetAsteroid:Set[${This.NearestAsteroid[0, TRUE]}]
 		}
 
@@ -616,5 +751,31 @@ objectdef obj_Asteroids
 		}
 		while ${Target:Next(exists)}
 		return ${AsteroidsLocked}
+	}
+
+	; Count asteroids within range for competition threshold
+	member:int CountAsteroidsInRange(float maxRange)
+	{
+		variable index:entity Asteroids
+		EVE:QueryEntities[Asteroids, "CategoryID = CATEGORYID_ORE && Distance < ${maxRange}"]
+		return ${Asteroids.Used}
+	}
+
+	; Simple competitive mining: ignore claims when we have inactive lasers OR asteroid supply is low
+	member:bool ShouldCompete()
+	{
+		; Force competition when asteroid supply is critically low
+		variable int asteroidCount = ${This.CountAsteroidsInRange[${Ship.OptimalMiningRange}]}
+		if ${asteroidCount} <= 10
+		{
+			return TRUE
+		}
+
+		; If we have inactive lasers and there are asteroids available, compete even if claimed
+		if ${Ship.TotalMiningLasers} > ${Ship.TotalActivatedMiningLasers}
+		{
+			return TRUE
+		}
+		return FALSE
 	}
 }

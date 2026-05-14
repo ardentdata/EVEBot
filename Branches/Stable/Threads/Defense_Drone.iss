@@ -368,14 +368,28 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 				relay all "Event[EVEBot_AttackerDeceased]:Execute[${MyShip.ID}, ${CurrentHostile.Value.HostileID}]"
 				continue
 			}
+
+			; Check if we have free target slots before targeting
+			if ${Ship.AvailableTargets} <= 0
+			{
+				Logger:Log["${LogPrefix}: No more target slots available, stopping targeting"]
+				break
+			}
+
+			; Check if already targeted or being targeted
+			if ${Entity[${CurrentHostile.Value.HostileID}].IsLockedTarget} || ${Entity[${CurrentHostile.Value.HostileID}].BeingTargeted}
+			{
+				continue
+			}
+
 			if ${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Ship.OptimalTargetingRange} && \
 				${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Me.DroneControlDistance}
-				{
-					Entity[${CurrentHostile.Value.HostileID}]:LockTarget
-					This.CurrentTarget:Set[${CurrentHostile.Value.HostileID}]
-					Logger:Log["${LogPrefix}: Targeting ${This.CurrentTarget.ID}:${This.CurrentTarget.Name}"]
-					break
-				}
+			{
+				Entity[${CurrentHostile.Value.HostileID}]:LockTarget
+				This.CurrentTarget:Set[${CurrentHostile.Value.HostileID}]
+				Logger:Log["${LogPrefix}: Targeting ${This.CurrentTarget.ID}:${This.CurrentTarget.Name} (${Ship.AvailableTargets} slots remaining)"]
+				; Don't break - continue to target more hostiles if slots available
+			}
 		}
 		while ${CurrentHostile:Next(exists)}
 	}

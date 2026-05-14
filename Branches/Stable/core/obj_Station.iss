@@ -193,6 +193,7 @@ objectdef obj_Station
 		wait 10
 		Logger:Log["Undock: Complete"]
 
+
 		call Inventory.ShipCargo.Activate
 		Config.Common:SetHomeStation[${Entity["(GroupID = GROUP_STATION || GroupID = GROUP_STRUCTURECITADEL)"].Name}]
 

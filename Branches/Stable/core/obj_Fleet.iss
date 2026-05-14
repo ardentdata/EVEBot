@@ -48,9 +48,22 @@ objectdef obj_Fleet inherits obj_BaseClass
 	method Process()
 	{
 		;	Step 1 - Accept fleet invites from my leader
+		; Check both API and modal window (fallback for broken Me.Fleet.Invited)
+		variable bool HasInvite = FALSE
+
 		if ${Me.Fleet.Invited}
 		{
-			if ${Me.Fleet.InvitationText.Find[${Config.Fleet.FleetLeader}]}
+			HasInvite:Set[TRUE]
+		}
+		elseif ${EVEWindow[ByName,modal](exists)} && ${EVEWindow[ByName,modal].Text.Find["wants you to join their fleet"]}
+		{
+			HasInvite:Set[TRUE]
+		}
+
+		if ${HasInvite}
+		{
+			; Check if invite is from our leader (check both sources)
+			if ${Me.Fleet.InvitationText.Find[${Config.Fleet.FleetLeader}]} || ${EVEWindow[ByName,modal].Text.Find[${Config.Fleet.FleetLeader}]}
 			{
 				Me.Fleet:AcceptInvite
 			}

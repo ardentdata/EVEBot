@@ -55,6 +55,9 @@ objectdef obj_Ship
 
 	variable obj_Drones Drones
 
+	variable set SimpleCrystalOres
+	variable set CoherentCrystalOres
+
 	method Initialize()
 	{
 		if !${Me.InStation} && ${Me.InSpace}
@@ -62,7 +65,26 @@ objectdef obj_Ship
 			This:UpdateModuleList
 		}
 		Event[EVENT_ONFRAME]:AttachAtom[This:Pulse]
+
+		; Initialize crystal family mappings
+		This:InitializeCrystalMappings[]
+
 		Logger:Log["obj_Ship: Initialized", LOG_MINOR]
+	}
+
+	method InitializeCrystalMappings()
+	{
+		; Simple Asteroid Mining Crystal ores
+		SimpleCrystalOres:Clear
+		SimpleCrystalOres:Add["Veldspar"]
+		SimpleCrystalOres:Add["Scordite"]
+		SimpleCrystalOres:Add["Pyroxeres"]
+		SimpleCrystalOres:Add["Plagioclase"]
+
+		; Coherent Asteroid Mining Crystal ores
+		CoherentCrystalOres:Clear
+		CoherentCrystalOres:Add["Omber"]
+		CoherentCrystalOres:Add["Kernite"]
 	}
 
 	method Shutdown()
@@ -257,21 +279,67 @@ objectdef obj_Ship
 		return ${Math.Calc[${MyShip.CargoCapacity}-${MyShip.UsedCargoCapacity}]}
 	}
 
-	method StackCargoHold()
+	function StackCargoHold()
 	{
+		; Stack cargo hold - converted from method to function, eliminated unnecessary wait
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo](exists)}
 		{
-			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo]:MakeActive
-			EVEWindow["Inventory"]:StackAll
+			EVEWindow[Inventory]:StackAll
+			return TRUE
 		}
+		return FALSE
 	}
 
-	method StackOreHold()
+	function StackOreHold()
 	{
+		; Stack ore hold - ensure ore hold is active before stacking
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
 		{
-			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold]:MakeActive
-			EVEWindow["Inventory"]:StackAll
+			call Inventory.ShipGeneralMiningHold.Activate
+			wait 2
+			EVEWindow[Inventory]:StackAll
+			return TRUE
+		}
+		return FALSE
+	}
+
+	function ActivateFuelBay()
+	{
+		Logger:Log["DEBUG: ActivateFuelBay called, FuelBayExists=${This.FuelBayExists}", LOG_DEBUG]
+
+		if !${This.FuelBayExists}
+		{
+			Logger:Log["DEBUG: FuelBay does not exist, returning", LOG_DEBUG]
+			return
+		}
+
+		; First, ensure inventory window is open
+		if !${EVEWindow[Inventory](exists)}
+		{
+			Logger:Log["DEBUG: Opening inventory window...", LOG_DEBUG]
+			EVE:Execute[OpenInventory]
+			; Wait for inventory window to open
+			wait 20
+		}
+		else
+		{
+			Logger:Log["DEBUG: Inventory window already open", LOG_DEBUG]
+		}
+
+		variable string WindowName = ${This.FuelBayWindowName}
+		Logger:Log["DEBUG: Activating fuel bay window: ${WindowName}", LOG_DEBUG]
+
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}](exists)}
+		{
+			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}]:MakeActive
+			wait 5
+			Logger:Log["DEBUG: Fuel bay window activated", LOG_DEBUG]
+			Logger:Log["DEBUG: Fuel bay LocationFlag: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlag}", LOG_DEBUG]
+			Logger:Log["DEBUG: Fuel bay LocationFlagID: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlagID}", LOG_DEBUG]
+		}
+		else
+		{
+			Logger:Log["DEBUG: ERROR - ChildWindow does not exist!", LOG_DEBUG]
 		}
 	}
 
@@ -439,6 +507,112 @@ objectdef obj_Ship
 		}
 
 		if ${This.CargoFreeSpace} <= ${Math.Calc[${MyShip.CargoCapacity}*0.50]}
+		{
+			return TRUE
+		}
+		return FALSE
+	}
+
+	member:bool FuelBayExists()
+	{
+		; Try multiple possible names for fuel bay
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFuelBay](exists)}
+		{
+			return TRUE
+		}
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, FuelBay](exists)}
+		{
+			return TRUE
+		}
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFuel](exists)}
+		{
+			return TRUE
+		}
+		return FALSE
+	}
+
+	member:string FuelBayWindowName()
+	{
+		; Return which window name actually works
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFuelBay](exists)}
+		{
+			return "ShipFuelBay"
+		}
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, FuelBay](exists)}
+		{
+			return "FuelBay"
+		}
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFuel](exists)}
+		{
+			return "ShipFuel"
+		}
+		return ""
+	}
+
+	member:float FuelBayCapacity()
+	{
+		if !${This.FuelBayExists}
+		{
+			return 0
+		}
+		variable string WindowName = ${This.FuelBayWindowName}
+		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].Capacity}
+	}
+
+	member:float FuelBayUsedCapacity()
+	{
+		if !${This.FuelBayExists}
+		{
+			return 0
+		}
+		variable string WindowName = ${This.FuelBayWindowName}
+		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].UsedCapacity}
+	}
+
+	member:float FuelBayFreeSpace()
+	{
+		variable float capacity = ${This.FuelBayCapacity}
+		if ${capacity} <= 0
+		{
+			return 0
+		}
+		return ${Math.Calc[${capacity} - ${This.FuelBayUsedCapacity}]}
+	}
+
+	member:bool FuelBayBelowHalf()
+	{
+		; Check if capacity values are valid (not negative)
+		variable float capacity = ${This.FuelBayCapacity}
+		variable float usedCapacity = ${This.FuelBayUsedCapacity}
+
+		if ${capacity} <= 0 || ${usedCapacity} < 0
+		{
+			; Invalid capacity data - window probably not activated yet
+			return FALSE
+		}
+
+		variable float UsedPct = ${Math.Calc[${usedCapacity} / ${capacity} * 100]}
+
+		if ${UsedPct} < 50
+		{
+			return TRUE
+		}
+		return FALSE
+	}
+
+	member:bool FuelBayEmpty()
+	{
+		; Check if capacity values are valid (not negative)
+		variable float capacity = ${This.FuelBayCapacity}
+		variable float usedCapacity = ${This.FuelBayUsedCapacity}
+
+		if ${capacity} <= 0 || ${usedCapacity} < 0
+		{
+			; Invalid capacity data - window probably not activated yet
+			return FALSE
+		}
+
+		if ${usedCapacity} <= 0
 		{
 			return TRUE
 		}
@@ -1316,15 +1490,77 @@ objectdef obj_Ship
 		}
 	}
 
+	; Extract base ore type from grade variants
+	; Input: "Veldspar II-Grade" -> Output: "Veldspar"
+	; Input: "Kernite" -> Output: "Kernite"
+	member:string ExtractBaseOreType(string FullOreType)
+	{
+		variable string BaseType
+		BaseType:Set[${FullOreType}]
+
+		; Remove grade suffixes
+		if ${BaseType.Find[" II-Grade"](exists)}
+		{
+			BaseType:Set[${BaseType.Replace[" II-Grade", ""]}]
+		}
+		elseif ${BaseType.Find[" III-Grade"](exists)}
+		{
+			BaseType:Set[${BaseType.Replace[" III-Grade", ""]}]
+		}
+		elseif ${BaseType.Find[" IV-Grade"](exists)}
+		{
+			BaseType:Set[${BaseType.Replace[" IV-Grade", ""]}]
+		}
+
+		return ${BaseType}
+	}
+
+	; Determine crystal family from crystal name
+	; Input: "Simple Asteroid Mining Crystal Type A II" -> Output: "Simple"
+	; Input: "Coherent Asteroid Mining Crystal Type B I" -> Output: "Coherent"
+	member:string GetCrystalFamily(string CrystalName)
+	{
+		if ${CrystalName.Find["Simple Asteroid Mining Crystal"](exists)}
+		{
+			return "Simple"
+		}
+		elseif ${CrystalName.Find["Coherent Asteroid Mining Crystal"](exists)}
+		{
+			return "Coherent"
+		}
+
+		; Unknown crystal family
+		return "UNKNOWN"
+	}
+
 	function ChangeMiningLaserCrystal(string OreType, string SlotName)
 	{
 		; We might need to change loaded crystal
 		variable string LoadedAmmo
 
 		LoadedAmmo:Set[${This.LoadedMiningLaserCrystal[${SlotName}]}]
-		if !${OreType.Find[${LoadedAmmo}](exists)}
+
+		; Extract base ore type (remove grade suffix)
+		variable string OreBaseType
+		OreBaseType:Set[${This.ExtractBaseOreType[${OreType}]}]
+
+		; Check if we need to change crystals
+		variable bool NeedToChange = TRUE
+		variable string LoadedFamily = ${This.GetCrystalFamily[${LoadedAmmo}]}
+
+		; If loaded crystal is from correct family, no change needed
+		if ${LoadedFamily.Equal["Simple"]} && ${SimpleCrystalOres.Contains[${OreBaseType}]}
 		{
-			Logger:Log["Current crystal in ${SlotName} is ${LoadedAmmo}, looking for ${OreType}"]
+			NeedToChange:Set[FALSE]
+		}
+		elseif ${LoadedFamily.Equal["Coherent"]} && ${CoherentCrystalOres.Contains[${OreBaseType}]}
+		{
+			NeedToChange:Set[FALSE]
+		}
+
+		if ${NeedToChange}
+		{
+			Logger:Log["Current crystal in ${SlotName} is ${LoadedAmmo}, looking for crystal for ${OreType}"]
 			variable index:item CrystalList
 			variable iterator CrystalIterator
 
@@ -1334,27 +1570,36 @@ objectdef obj_Ship
 			{
 				Logger:Log["Unable to find ammo for ${SlotName} - lag?"]
 			}
+
 			CrystalList:GetIterator[CrystalIterator]
 			if ${CrystalIterator:First(exists)}
 			do
 			{
-				variable string CrystalType
-				CrystalType:Set[${CrystalIterator.Value.Name.Token[1, " "]}]
-				if ${CystalType.Equal["Ochre"]}
+				variable string CrystalFamily
+				CrystalFamily:Set[${This.GetCrystalFamily[${CrystalIterator.Value.Name}]}]
+
+				; Check if crystal family matches ore type
+				variable bool CrystalMatches = FALSE
+
+				if ${CrystalFamily.Equal["Simple"]} && ${SimpleCrystalOres.Contains[${OreBaseType}]}
 				{
-					CrystalType:Set["Dark Ochre"]
+					CrystalMatches:Set[TRUE]
 				}
-				;echo "DEBUG: ChangeMiningLaserCrystal Testing ${OreType} contains ${CrystalType}"
-				if ${OreType.Find[${CrystalType}](exists)}
+				elseif ${CrystalFamily.Equal["Coherent"]} && ${CoherentCrystalOres.Contains[${OreBaseType}]}
+				{
+					CrystalMatches:Set[TRUE]
+				}
+
+				if ${CrystalMatches}
 				{
 					Logger:Log["Switching Crystal in ${SlotName} from ${LoadedAmmo} to ${CrystalIterator.Value.Name}"]
 					MyShip.Module[${SlotName}]:ChangeAmmo[${CrystalIterator.Value.ID},1]
-					; This takes 2 seconds ingame, let's give it 50% more
 					wait 30
 					return
 				}
 			}
 			while ${CrystalIterator:Next(exists)}
+
 			Logger:Log["Warning: No crystal found for ore type ${OreType}, efficiency reduced"]
 		}
 	}
@@ -1503,10 +1748,18 @@ objectdef obj_Ship
 				if ${ModuleIter.Value.SpecialtyCrystalMiningAmount(exists)}
 				{
 					variable string OreType
-					OreType:Set[${Entity[${id}].Name.Token[2,"("]}]
-					OreType:Set[${OreType.Token[1,")"]}]
-					;OreType:Set[${OreType.Replace["(",]}]
-					;OreType:Set[${OreType.Replace[")",]}]
+					; Check if entity name contains parentheses (old format: "Name (OreType)")
+					if ${Entity[${id}].Name.Find["("](exists)}
+					{
+						OreType:Set[${Entity[${id}].Name.Token[2,"("]}]
+						OreType:Set[${OreType.Token[1,")"]}]
+					}
+					else
+					{
+						; New format: just the ore name directly (e.g., "Veldspar", "Scordite II-Grade")
+						OreType:Set[${Entity[${id}].Name}]
+					}
+					OreType:Set[${This.ExtractBaseOreType[${OreType}]}]
 					call This.ChangeMiningLaserCrystal "${OreType}" ${Slot}
 				}
 

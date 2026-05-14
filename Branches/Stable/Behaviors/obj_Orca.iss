@@ -11,6 +11,7 @@ objectdef obj_Orca
 	variable int PulseIntervalInSeconds = 2
 
 	variable time NextHaulerNotify
+	variable time NextFuelBayCheck
 
 	;	State information (What we're doing)
 	variable string CurrentState = "IDLE"
@@ -477,9 +478,19 @@ objectdef obj_Orca
 
 				;	If we're in Orca mode, we need to unload all locations capable of holding ore, not just the cargo hold.
 				;	Note:  I need to replace the shuffle with 3 direct movements
-				call Cargo.TransferCargoFromShipGeneralMiningHoldToStation
-				call Cargo.TransferCargoFromShipCorporateHangarToStation
-				call Cargo.TransferOreToStationHangar
+				;	Check if delivering to station corp hangar folder 1 or regular item hangar
+				if ${Config.Miner.DeliveryLocationTypeName.Equal["Station Corp Hangar"]}
+				{
+					call Cargo.TransferCargoFromShipGeneralMiningHoldToStationCorpHangar
+					call Cargo.TransferCargoFromShipCorporateHangarToStationCorpHangar
+					call Cargo.TransferOreToStationCorpHangar
+				}
+				else
+				{
+					call Cargo.TransferCargoFromShipGeneralMiningHoldToStation
+					call Cargo.TransferCargoFromShipCorporateHangarToStation
+					call Cargo.TransferOreToStationHangar
+				}
 
 				LastUsedCargoCapacity:Set[0]
 				call Station.Undock
@@ -517,6 +528,31 @@ objectdef obj_Orca
 					;	*	If our delivery location is in the same system, dock there
 					;	*	If the above didn't work, panic so the user knows to correct their configuration and try again.
 					case Station
+
+						;	Get info about the crystals currently loaded
+						call Ship.SetActiveCrystals
+
+						if ${EVE.Bookmark[${This.DeliveryLocation}](exists)} && ${EVE.Bookmark[${This.DeliveryLocation}].SolarSystemID} != ${Me.SolarSystemID}
+						{
+							call Ship.TravelToSystem ${EVE.Bookmark[${This.DeliveryLocation}].SolarSystemID}
+							break
+						}
+						if ${EVE.Bookmark[${This.DeliveryLocation}](exists)} && ${EVE.Bookmark[${This.DeliveryLocation}].SolarSystemID} == ${Me.SolarSystemID}
+						{
+							Logger:Log["Debug: Station.DockAtStation called from Line _LINE_ ", LOG_DEBUG]
+							call Station.DockAtStation ${EVE.Bookmark[${This.DeliveryLocation}].ItemID}
+							break
+						}
+						Logger:Log["ALERT: Station dock failed for delivery location \"${This.DeliveryLocation}\""]
+						Logger:Log["ALERT: Switching to HARD STOP mode!"]
+						EVEBot.ReturnToStation:Set[TRUE]
+						break
+
+					;	This means we're delivering to a station's first corporate hangar folder.
+					;	*	If our delivery location is in another system, set autopilot and go there
+					;	*	If our delivery location is in the same system, dock there
+					;	*	If the above didn't work, panic so the user knows to correct their configuration and try again.
+					case Station Corp Hangar
 
 						;	Get info about the crystals currently loaded
 						call Ship.SetActiveCrystals
@@ -723,6 +759,10 @@ objectdef obj_Orca
 		variable bool TimeToMove = FALSE
 		if ${Asteroids.FieldEmpty}
 		{
+			if ${Belts.Valid} && ${Belts.AtBelt} && !${Belts.IsMarkedEmpty[${Belts.Name}]}
+			{
+				Belts:MarkEmpty[]
+			}
 			Logger:Log["Orca.OrcaInBelt: No asteroids detected, forcing belt change"]
 			TimeToMove:Set[TRUE]
 		}
@@ -789,7 +829,7 @@ objectdef obj_Orca
 			if ${Entity[${NearestAsteroidID}].Distance} > ${OrcaRange}
 			{
 				Logger:Log["Orca.OrcaInBelt: Approaching ${Entity[${Asteroids.NearestAsteroid}].Name}"]
-				This:StartApproaching[${NearestAsteroidID}}, ${OrcaRange}]
+				This:StartApproaching[${NearestAsteroidID}, ${OrcaRange}]
 				return
 			}
 		}
@@ -827,9 +867,6 @@ objectdef obj_Orca
 		}
 
 		;	This section is for moving ore into the Orca ore and cargo holds, so they will fill before the Corporate Hangar, to which the miner is depositing
-		; TODO - reduce this cycle spam
-		call Inventory.ShipFleetHangar.Activate
-
 		if ${Config.Miner.DeliveryLocationTypeName.Equal["No Delivery"]}
 		{
 			; We're in no-delivery mode (we don't deliver, it's picked up)
@@ -850,19 +887,69 @@ objectdef obj_Orca
 				if !${Ship.OreHoldFull}
 				{
 					call Cargo.TransferOreFromShipFleetHangarToOreHold
-					Ship:StackOreHold
+					call Ship.StackOreHold
 				}
 				if !${Ship.CargoFull}
 				{
 					call Cargo.TransferOreFromShipFleetHangarToCargoHold
-					Ship:StackCargoHold
+					call Ship.StackCargoHold
 				}
 			}
+		}
+
+		;	Move compressed ore from fleet hangar to mining hold (ore hold) which has much larger capacity
+		;	This keeps the fleet hangar clear for miners to deposit more compressed ore
+		if !${Ship.OreHoldFull}
+		{
+			call Cargo.TransferCompressedOreFromShipFleetHangarToOreHold
+			call Ship.StackOreHold
 		}
 
 		if ${Config.Miner.OrcaTractorLoot}
 		{
 			call This.Tractor
+		}
+
+		; Check fuel bay level every 60 seconds
+		if ${Time.Timestamp} >= ${This.NextFuelBayCheck.Timestamp}
+		{
+			Logger:Log["DEBUG: Fuel bay check timer triggered", LOG_DEBUG]
+
+			; Activate fuel bay window to get valid capacity values
+			call Ship.ActivateFuelBay
+
+			Logger:Log["DEBUG: FuelBayExists = ${Ship.FuelBayExists}, WindowName = '${Ship.FuelBayWindowName}'", LOG_DEBUG]
+			Logger:Log["DEBUG: FuelBayCapacity = ${Ship.FuelBayCapacity}, Used = ${Ship.FuelBayUsedCapacity}", LOG_DEBUG]
+
+			if ${Ship.FuelBayBelowHalf}
+			{
+				Logger:Log["Fuel bay below 50%, checking for Heavy Water in cargo...", LOG_MINOR]
+				call Cargo.TransferHeavyWaterFromCargoToFuelBay
+
+				if !${Return}
+				{
+					; No heavy water found in cargo - check if fuel bay is completely empty
+					if ${Ship.FuelBayEmpty}
+					{
+						; Completely out of fuel with no way to refuel - critical safety issue
+						Logger:Log["CRITICAL: Fuel bay empty and no Heavy Water available in cargo!", LOG_CRITICAL]
+						Logger:Log["Returning to safe location for refuel", LOG_CRITICAL]
+						EVEBot.ReturnToStation:Set[TRUE]
+					}
+					else
+					{
+						Logger:Log["DEBUG: No heavy water in cargo but fuel bay not empty yet (has ${Ship.FuelBayUsedCapacity}/${Ship.FuelBayCapacity})", LOG_DEBUG]
+					}
+				}
+			}
+			else
+			{
+				Logger:Log["DEBUG: Fuel bay OK (above 50%)", LOG_DEBUG]
+			}
+
+			This.NextFuelBayCheck:Set[${Time.Timestamp}]
+			This.NextFuelBayCheck.Second:Inc[60]
+			This.NextFuelBayCheck:Update
 		}
 
 		;	This checks to make sure there aren't any potential jet can flippers around before we dump a jetcan
@@ -979,6 +1066,12 @@ objectdef obj_Orca
 		if ${ForceDropoff}
 		{
 			Return TRUE
+		}
+		; Check if ore hold values are valid before checking free space
+		; If capacity is 0 or used capacity is negative, the window isn't ready
+		if ${Ship.OreHoldCapacity} <= 0
+		{
+			return FALSE
 		}
 		if ${Ship.OreHoldFreeSpace} < 1000
 		{

@@ -725,21 +725,38 @@ objectdef obj_Agents
 		Logger:Log["obj_Agents: DEBUG: amIterator.Value.Name = ${amIterator.Value.Name}", LOG_DEBUG]
 		Logger:Log["obj_Agents: DEBUG: amIterator.Value.ExpirationTime = ${amIterator.Value.ExpirationTime.DateAndTime}", LOG_DEBUG]
 
-		; Opens the details window for the mission
-		amIterator.Value:GetDetails
-		wait 50
+		; Open agent conversation to get mission details (GetDetails API was removed June 2023)
+		if !${EVEWindow[byCaption, Agent Conversation](exists)}
+		{
+			Logger:Log["obj_Agents:MissionDetails: Starting conversation with agent ${This.ActiveAgent}."]
+			EVE.Agent[${This.AgentIndex}]:StartConversation
+			do
+			{
+				Logger:Log["obj_Agents:MissionDetails: Waiting for conversation window..."]
+				wait 50
+			}
+			while !${EVEWindow[byCaption, Agent Conversation](exists)}
+		}
+
+		; Click View Mission to load mission details into conversation window
+		call This.CheckButtonExists "${This.BUTTON_VIEW_MISSION}"
+		if ${Return}
+		{
+			call This.PressButton "${This.BUTTON_VIEW_MISSION}"
+			; Wait for mission details to load in conversation window
+			wait 50
+		}
+
 		variable obj_MissionParser MissionParser
 
-		if ${EVEWindow[ByCaption, "Mission journal - ${This.ActiveAgent}"](exists)}
+		if ${EVEWindow[byCaption, Agent Conversation](exists)}
 		{
-			; The embedded quotes look odd here, but this is required to escape the comma that exists in the caption and in the resulting html.
-			MissionParser.MissionDetails:Set["${EVEWindow[ByCaption,"Mission journal - ${This.ActiveAgent}"].HTML.Escape}"]
-			EVEWindow[ByCaption, "Mission journal - ${This.ActiveAgent}"]:Close
+			Logger:Log["obj_Agents:MissionDetails: Parsing HTML from Agent Conversation window", LOG_DEBUG]
+			MissionParser.MissionDetails:Set["${EVEWindow[byCaption, Agent Conversation].HTML.Escape}"]
 		}
 		else
 		{
-			Logger:Log["obj_Agents: ERROR: Mission details window was not found: `Mission journal - ${This.ActiveAgent}` for ${amIterator.Value.Name}", LOG_CRITICAL]
-			Logger:Log["obj_Agents: DEBUG: amIterator.Value.Name.Escape = ${amIterator.Value.Name.Escape}"]
+			Logger:Log["obj_Agents: ERROR: Agent Conversation window not found for mission ${amIterator.Value.Name}", LOG_CRITICAL]
 			return
 		}
 
@@ -869,22 +886,16 @@ objectdef obj_Agents
 		Logger:Log["obj_Agents: DEBUG: amIterator.Value.Name = ${amIterator.Value.Name}", LOG_DEBUG]
 		Logger:Log["obj_Agents: DEBUG: amIterator.Value.ExpirationTime = ${amIterator.Value.ExpirationTime.DateAndTime}", LOG_DEBUG]
 
-		; Opens the details window for the mission
-		amIterator.Value:GetDetails
-		wait 50
+		; Parse mission details from agent conversation window (GetDetails API was removed June 2023)
 		variable obj_MissionParser MissionParser
 
-		; Note - if this starts to fail, see MissionParser:UpdateCaption & MissionParser.Caption instead of amIterator.Value.Name for the window.
-		if ${EVEWindow[ByCaption,"Mission journal - ${This.ActiveAgent}"](exists)}
+		if ${EVEWindow[byCaption, Agent Conversation](exists)}
 		{
-			; The embedded quotes look odd here, but this is required to escape the comma that exists in the caption and in the resulting html.
-			MissionParser.MissionDetails:Set["${EVEWindow[ByCaption,"Mission journal - ${This.ActiveAgent}"].HTML.Escape}"]
-			EVEWindow[ByCaption, "Mission journal - ${This.ActiveAgent}"]:Close
+			MissionParser.MissionDetails:Set["${EVEWindow[byCaption, Agent Conversation].HTML.Escape}"]
 		}
 		else
 		{
-			Logger:Log["obj_Agents: ERROR: Mission details window was not found: `Mission journal - ${This.ActiveAgent}` for ${amIterator.Value.Name}", LOG_CRITICAL]
-			Logger:Log["obj_Agents: DEBUG: amIterator.Value.Name.Escape = ${amIterator.Value.Name.Escape}"]
+			Logger:Log["obj_Agents: ERROR: Agent Conversation window not found for mission ${amIterator.Value.Name}", LOG_CRITICAL]
 			return
 		}
 
@@ -892,18 +903,54 @@ objectdef obj_Agents
 		MissionParser.MissionName:Set[${amIterator.Value.Name}]
 		MissionParser:SaveCacheFile
 
+		; Check for low-sec using mission bookmarks (reliable fallback when HTML parsing fails)
+		variable bool isLowSecByBookmark = FALSE
+		variable index:bookmark MissionBookmarks
+		variable iterator mbIterator
+		amIterator.Value:GetBookmarks[MissionBookmarks]
+		MissionBookmarks:GetIterator[mbIterator]
+
+		if ${mbIterator:First(exists)}
+		{
+			do
+			{
+				variable float systemSecurity
+				systemSecurity:Set[${Universe[${mbIterator.Value.SolarSystemID}].Security}]
+				Logger:Log["obj_Agents: DEBUG: Bookmark ${mbIterator.Value.Label} in system ${mbIterator.Value.SolarSystemID} security: ${systemSecurity}", LOG_DEBUG]
+				if ${systemSecurity} < 0.45
+				{
+					Logger:Log["obj_Agents: WARNING: Mission destination ${mbIterator.Value.Label} is in low-sec (${systemSecurity})!", LOG_CRITICAL]
+					isLowSecByBookmark:Set[TRUE]
+					break
+				}
+			}
+			while ${mbIterator:Next(exists)}
+		}
+
+		; Use bookmark-based low-sec detection as it's more reliable than HTML parsing
+		variable bool isLowSec
+		if ${isLowSecByBookmark}
+		{
+			isLowSec:Set[TRUE]
+		}
+		else
+		{
+			isLowSec:Set[${MissionParser.IsLowSec}]
+		}
+		Logger:Log["obj_Agents: DEBUG: IsLowSec (final): ${isLowSec} (bookmark: ${isLowSecByBookmark}, parser: ${MissionParser.IsLowSec})", LOG_DEBUG]
+
 		Missions.MissionCache:AddMission[${amIterator.Value.AgentID}, "${amIterator.Value.Name}"]
 		Missions.MissionCache:SetFactionID[${amIterator.Value.AgentID}, ${MissionParser.FactionID}]
 		Missions.MissionCache:SetTypeID[${amIterator.Value.AgentID}, ${MissionParser.TypeID}]
 		Missions.MissionCache:SetVolume[${amIterator.Value.AgentID}, ${MissionParser.Volume}]
-		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID}, ${MissionParser.IsLowSec}]
+		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID}, ${isLowSec}]
 
 		variable time lastDecline
 		lastDecline:Set[${Config.Agents.LastDecline[${This.AgentName}]}]
 		lastDecline.Hour:Inc[4]
 		lastDecline:Update
 
-		if ${Config.Missioneer.AvoidLowSec} && ${MissionParser.IsLowSec}
+		if ${Config.Missioneer.AvoidLowSec} && ${isLowSec}
 		{
 			if ${lastDecline.Timestamp} >= ${Time.Timestamp}
 			{
