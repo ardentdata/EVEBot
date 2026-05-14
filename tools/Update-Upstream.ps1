@@ -14,7 +14,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
 
 $upstreamUrl = (& git -C $repoRoot remote get-url upstream 2>$null).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($upstreamUrl)) {
-    throw "Missing upstream remote. Expected: git remote add upstream git@github.com:CyberTech/EVEBot.git"
+    throw "Missing upstream remote. Expected: git remote add upstream https://github.com/CyberTech/EVEBot.git"
 }
 
 & git -C $repoRoot fetch upstream --prune

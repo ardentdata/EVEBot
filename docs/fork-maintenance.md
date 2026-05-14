@@ -4,8 +4,8 @@ This checkout is the maintained Ardent Data fork of `CyberTech/EVEBot`.
 
 ## Repository Layout
 
-- `origin`: `git@github.com:ardentdata/EVEBot.git`
-- `upstream`: `git@github.com:CyberTech/EVEBot.git`
+- `origin`: `ssh://git@ssh.github.com:443/ardentdata/EVEBot.git`
+- `upstream`: `https://github.com/CyberTech/EVEBot.git` for fetch, with upstream push disabled locally
 - production branch: `master`
 
 Keep upstream and local work separate:
