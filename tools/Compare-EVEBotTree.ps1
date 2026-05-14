@@ -9,6 +9,8 @@ param(
 
     [switch]$StableOnly,
 
+    [switch]$IgnoreCrAtEol,
+
     [string[]]$Exclude = @(
         ".git/**",
         ".vs/**",
@@ -111,7 +113,8 @@ function Get-TreeInventory {
     param(
         [string]$Root,
         [string[]]$ExcludePatterns,
-        [bool]$StableImportOnly
+        [bool]$StableImportOnly,
+        [bool]$NormalizeCrAtEol
     )
 
     $files = @{}
@@ -125,7 +128,21 @@ function Get-TreeInventory {
             return
         }
 
-        $files[$relative] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        if ($NormalizeCrAtEol) {
+            $text = [System.IO.File]::ReadAllText($_.FullName)
+            $text = $text -replace "`r`n", "`n"
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $files[$relative] = [System.BitConverter]::ToString($sha.ComputeHash($bytes)).Replace("-", "")
+            }
+            finally {
+                $sha.Dispose()
+            }
+        }
+        else {
+            $files[$relative] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        }
     }
 
     return $files
@@ -164,8 +181,8 @@ try {
         throw "Failed to extract reference archive: $Reference"
     }
 
-    $baseFiles = Get-TreeInventory -Root $tempRoot -ExcludePatterns $Exclude -StableImportOnly $StableOnly
-    $otherFiles = Get-TreeInventory -Root $resolvedOther -ExcludePatterns $Exclude -StableImportOnly $StableOnly
+    $baseFiles = Get-TreeInventory -Root $tempRoot -ExcludePatterns $Exclude -StableImportOnly $StableOnly -NormalizeCrAtEol $IgnoreCrAtEol
+    $otherFiles = Get-TreeInventory -Root $resolvedOther -ExcludePatterns $Exclude -StableImportOnly $StableOnly -NormalizeCrAtEol $IgnoreCrAtEol
 
     $baseKeys = @($baseFiles.Keys)
     $otherKeys = @($otherFiles.Keys)
@@ -179,6 +196,7 @@ try {
     Write-Host "Reference : $Reference"
     Write-Host "Other tree: $resolvedOther"
     Write-Host "StableOnly: $StableOnly"
+    Write-Host "Ignore CR : $IgnoreCrAtEol"
     Write-Host "Added     : $($added.Count)"
     Write-Host "Removed   : $($removed.Count)"
     Write-Host "Modified  : $($modified.Count)"

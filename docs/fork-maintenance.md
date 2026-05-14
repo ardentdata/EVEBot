@@ -55,10 +55,10 @@ The script reports files added, removed, and modified in the other tree. It inte
 For the Ardent Data operational import, use Stable-only mode:
 
 ```powershell
-.\tools\Compare-EVEBotTree.ps1 -OtherPath "V:\scripts\evebot" -Reference upstream/master -StableOnly
+.\tools\Compare-EVEBotTree.ps1 -OtherPath "V:\scripts\evebot" -Reference upstream/master -StableOnly -IgnoreCrAtEol
 ```
 
-Stable-only mode ignores `Branches/Dev`, debug scripts, generated behavior include files, local analysis/tooling folders, backups, Stable runtime config/logs, and runtime logs while keeping launcher/config files that are part of the private deployment workflow.
+Stable-only mode ignores `Branches/Dev`, debug scripts, generated behavior include files, local analysis/tooling folders, backups, Stable runtime config/logs, and runtime logs while keeping launcher/config files that are part of the private deployment workflow. `-IgnoreCrAtEol` suppresses CRLF-only drift so reports focus on content changes.
 
 ## Suggested Merge Plan For Test Environments
 
