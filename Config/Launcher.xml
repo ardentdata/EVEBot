@@ -5,21 +5,22 @@
 		<Set Name="Common">
 			<Setting Name="Login Name">cmdacade</Setting>
 			<Setting Name="Login Password">Tiapfca1!</Setting>
-			<Setting Name="AutoLoginCharID">0</Setting>
+			<Setting Name="AutoLoginCharID">1836993176</Setting>
 		</Set>
 	</Set>
 	<Set Name="Redemptio">
 		<Set Name="Common">
 			<Setting Name="Login Name">cmda2</Setting>
 			<Setting Name="Login Password">Tiapfca1!</Setting>
-			<Setting Name="AutoLoginCharID">0</Setting>
+			<Setting Name="AutoLoginCharID">1602853229</Setting>
+			<Setting Name="CharacterName">Redemptio</Setting>
 		</Set>
 	</Set>
 	<Set Name="Chaos MDK">
 		<Set Name="Common">
 			<Setting Name="Login Name">cmda3</Setting>
 			<Setting Name="Login Password">Tiapfca1!</Setting>
-			<Setting Name="AutoLoginCharID">0</Setting>
+			<Setting Name="AutoLoginCharID">1011869318</Setting>
 		</Set>
 	</Set>
 </InnerSpaceSettings>
