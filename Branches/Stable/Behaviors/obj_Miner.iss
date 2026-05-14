@@ -889,7 +889,7 @@ objectdef obj_Miner
 
 						if ${Entity[${Orca.Escape}](exists)} && ${Entity[${Orca.Escape}].Distance} <= LOOT_RANGE
 						{
-							call Cargo.TransferCompressedOreToShipFleetHangar ${Entity[${Orca.Escape}]}
+							call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}]}
 						}
 
 						break
@@ -1113,60 +1113,9 @@ objectdef obj_Miner
 
 			if (${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)} && ${Ship.OreHoldHalfFull}) || ${Ship.CargoTenthFull}
 			{
-					; Check if we actually have compressed ore to transfer
-					variable index:item AllOreItems
-					variable iterator OreIterator
-					variable int CompressedCount = 0
-
-					; Check cargo hold - get all ore items, then filter for compressed
-					Inventory.ShipCargo:GetItems[AllOreItems, "CategoryID == CATEGORYID_ORE"]
-
-					if ${AllOreItems.Used} > 0
-					{
-						AllOreItems:GetIterator[OreIterator]
-						if ${OreIterator:First(exists)}
-						{
-							do
-							{
-								if ${OreIterator.Value.Name.Find["Compressed"]} > 0
-								{
-									CompressedCount:Inc
-								}
-							}
-							while ${OreIterator:Next(exists)}
-						}
-					}
-
-					; If not found in cargo, check mining hold
-					if ${CompressedCount} == 0
-					{
-						AllOreItems:Clear
-						Inventory.ShipGeneralMiningHold:GetItems[AllOreItems, "CategoryID == CATEGORYID_ORE"]
-
-						if ${AllOreItems.Used} > 0
-						{
-							AllOreItems:GetIterator[OreIterator]
-							if ${OreIterator:First(exists)}
-							{
-								do
-								{
-									if ${OreIterator.Value.Name.Find["Compressed"]} > 0
-									{
-										CompressedCount:Inc
-									}
-								}
-								while ${OreIterator:Next(exists)}
-							}
-						}
-					}
-
-					; Transfer compressed ore to Orca if found
-					if ${CompressedCount} > 0
-					{
-						Logger:Log["Emptying ${CompressedCount} compressed ore item(s) to ${Entity[${Orca.Escape}].Name}'s Fleet Hangar"]
-						call Cargo.TransferCompressedOreToShipFleetHangar ${Entity[${Orca.Escape}].ID}
-						call Cargo.ReplenishCrystals ${Entity[${Orca.Escape}].ID}
-					}
+					Logger:Log["Emptying ore to ${Entity[${Orca.Escape}].Name}'s Corporate Hangars"]
+					call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}].ID}
+					call Cargo.ReplenishCrystals ${Entity[${Orca.Escape}].ID}
 			}
 
 		}

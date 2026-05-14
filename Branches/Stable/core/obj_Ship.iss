@@ -281,9 +281,11 @@ objectdef obj_Ship
 
 	function StackCargoHold()
 	{
-		; Stack cargo hold - converted from method to function, eliminated unnecessary wait
+		; Stack cargo hold - ensure cargo hold is active before stacking
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo](exists)}
 		{
+			call Inventory.ShipCargo.Activate
+			wait 2
 			EVEWindow[Inventory]:StackAll
 			return TRUE
 		}
