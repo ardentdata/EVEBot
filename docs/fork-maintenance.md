@@ -52,6 +52,14 @@ Common references:
 
 The script reports files added, removed, and modified in the other tree. It intentionally ignores `.git`, logs, and the runtime config patterns already ignored by the repository.
 
+For the Ardent Data operational import, use Stable-only mode:
+
+```powershell
+.\tools\Compare-EVEBotTree.ps1 -OtherPath "V:\scripts\evebot" -Reference upstream/master -StableOnly
+```
+
+Stable-only mode ignores `Branches/Dev`, debug scripts, generated behavior include files, local analysis/tooling folders, backups, Stable runtime config/logs, and runtime logs while keeping launcher/config files that are part of the private deployment workflow.
+
 ## Suggested Merge Plan For Test Environments
 
 When we are ready for the larger merge project:

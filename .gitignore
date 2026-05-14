@@ -3,13 +3,18 @@
 /Branches/*/Behaviors/**/_variables.iss
 _ActiveModules.iss
 *.log
+*.backup
+*.backup-*
+/.analysis/
+/.claude/
 /Testcases/**/lstypes*.txt
+/Testcases/Debug/
 /Branches/Stable/config/*Blacklist.xml
 /Branches/Stable/config/*Config.xml
 /Branches/Stable/config/*Mission Cache.xml
 /Branches/Stable/config/*Training.txt
 /Branches/Stable/config/*Whitelist.xml
+/Branches/Stable/config/Logs/
 /Branches/Dev/config/*
 !/Branches/Dev/config/Examples
 !/Branches/Dev/config/Examples/*
-

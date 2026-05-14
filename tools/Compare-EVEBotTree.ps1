@@ -7,21 +7,33 @@ param(
 
     [switch]$Fetch,
 
+    [switch]$StableOnly,
+
     [string[]]$Exclude = @(
         ".git/**",
         ".vs/**",
         ".idea/**",
+        ".analysis/**",
+        ".claude/**",
         "*.log",
+        "*.backup",
+        "*.backup-*",
         "_ActiveModules.iss",
+        "*/_ActiveModules.iss",
         "Branches/Dev/External/isxGamesCommon/**",
+        "Branches/*/Behaviors/_includes.iss",
+        "Branches/*/Behaviors/_variables.iss",
         "Branches/*/Behaviors/**/_includes.iss",
         "Branches/*/Behaviors/**/_variables.iss",
+        "Branches/Stable/config/*.xml",
         "Branches/Stable/config/*Blacklist.xml",
         "Branches/Stable/config/*Config.xml",
         "Branches/Stable/config/*Mission Cache.xml",
         "Branches/Stable/config/*Training.txt",
         "Branches/Stable/config/*Whitelist.xml",
+        "Branches/Stable/config/Logs/**",
         "Branches/Dev/config/**",
+        "Testcases/Debug/**",
         "Testcases/**/lstypes*.txt"
     )
 )
@@ -67,15 +79,48 @@ function Test-Excluded {
     return $false
 }
 
+function Test-StableImportPath {
+    param([string]$RelativePath)
+
+    if ($RelativePath -like "Branches/Stable/*") {
+        return $true
+    }
+
+    $allowedSharedPaths = @(
+        "EVEBot.iss",
+        "EVECallback.iss",
+        "EVEWatcher.iss",
+        "Launcher.iss",
+        "README.md",
+        "Config/Launcher.xml",
+        "Config/Config_Templates/Launcher.xml",
+        "External/POSInventory.iss",
+        "External/isxScripts/obj_LSQuery.iss",
+        "External/isxScripts/obj_LSTypeIterator.iss",
+        "External/isxScripts/obj_PulseTimer.iss",
+        "Support/obj_AutoPatcher.iss",
+        "Support/obj_Configuration.iss",
+        "Support/obj_LoginHandler.iss",
+        "Support/TestAPI.iss"
+    )
+
+    return $allowedSharedPaths -contains $RelativePath
+}
+
 function Get-TreeInventory {
     param(
         [string]$Root,
-        [string[]]$ExcludePatterns
+        [string[]]$ExcludePatterns,
+        [bool]$StableImportOnly
     )
 
     $files = @{}
     Get-ChildItem -LiteralPath $Root -Recurse -File -Force | ForEach-Object {
         $relative = Convert-ToRelativePath -Root $Root -FullName $_.FullName
+        if ($StableImportOnly -and -not (Test-StableImportPath -RelativePath $relative)) {
+            return
+        }
+
         if (Test-Excluded -RelativePath $relative -Patterns $ExcludePatterns) {
             return
         }
@@ -119,8 +164,8 @@ try {
         throw "Failed to extract reference archive: $Reference"
     }
 
-    $baseFiles = Get-TreeInventory -Root $tempRoot -ExcludePatterns $Exclude
-    $otherFiles = Get-TreeInventory -Root $resolvedOther -ExcludePatterns $Exclude
+    $baseFiles = Get-TreeInventory -Root $tempRoot -ExcludePatterns $Exclude -StableImportOnly $StableOnly
+    $otherFiles = Get-TreeInventory -Root $resolvedOther -ExcludePatterns $Exclude -StableImportOnly $StableOnly
 
     $baseKeys = @($baseFiles.Keys)
     $otherKeys = @($otherFiles.Keys)
@@ -133,6 +178,7 @@ try {
 
     Write-Host "Reference : $Reference"
     Write-Host "Other tree: $resolvedOther"
+    Write-Host "StableOnly: $StableOnly"
     Write-Host "Added     : $($added.Count)"
     Write-Host "Removed   : $($removed.Count)"
     Write-Host "Modified  : $($modified.Count)"
