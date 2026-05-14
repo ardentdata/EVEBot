@@ -101,3 +101,32 @@ Deploy only one side:
 The deploy tool copies only tracked, intentional deployment files. It does not delete target files, and it skips generated files, backups, logs, debug test scripts, maintenance docs/tools, and local analysis folders.
 
 The deploy tool refuses to run from a dirty working tree unless `-AllowDirty` is passed. Use that override only for temporary local testing.
+
+## Diff Operations
+
+Check both test installs for drift from the repository:
+
+```powershell
+.\tools\Diff-EVEBotTargets.ps1
+```
+
+Show the file-level drift details:
+
+```powershell
+.\tools\Diff-EVEBotTargets.ps1 -FullOutput
+```
+
+Check one target:
+
+```powershell
+.\tools\Diff-EVEBotTargets.ps1 -Target Local
+.\tools\Diff-EVEBotTargets.ps1 -Target Remote
+```
+
+Check the original modified source tree used for the first import:
+
+```powershell
+.\tools\Diff-EVEBotTargets.ps1 -Target LegacySource
+```
+
+The diff wrapper uses `Compare-EVEBotTree.ps1 -StableOnly -IgnoreCrAtEol`, so it ignores Dev, generated files, runtime logs/config, debug scripts, backups, and CRLF-only drift.
