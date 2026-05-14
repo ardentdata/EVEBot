@@ -309,12 +309,6 @@ objectdef obj_Ship
 	{
 		Logger:Log["DEBUG: ActivateFuelBay called, FuelBayExists=${This.FuelBayExists}", LOG_DEBUG]
 
-		if !${This.FuelBayExists}
-		{
-			Logger:Log["DEBUG: FuelBay does not exist, returning", LOG_DEBUG]
-			return
-		}
-
 		; First, ensure inventory window is open
 		if !${EVEWindow[Inventory](exists)}
 		{
@@ -329,6 +323,12 @@ objectdef obj_Ship
 		}
 
 		variable string WindowName = ${This.FuelBayWindowName}
+		if ${WindowName.Equal[""]}
+		{
+			Logger:Log["DEBUG: FuelBay child window does not exist after opening inventory", LOG_DEBUG]
+			return
+		}
+
 		Logger:Log["DEBUG: Activating fuel bay window: ${WindowName}", LOG_DEBUG]
 
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}](exists)}

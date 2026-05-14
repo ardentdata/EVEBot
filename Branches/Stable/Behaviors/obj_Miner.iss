@@ -889,7 +889,7 @@ objectdef obj_Miner
 
 						if ${Entity[${Orca.Escape}](exists)} && ${Entity[${Orca.Escape}].Distance} <= LOOT_RANGE
 						{
-							call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}]}
+							call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}].ID}
 						}
 
 						break

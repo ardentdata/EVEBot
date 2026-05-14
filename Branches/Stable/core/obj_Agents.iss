@@ -730,10 +730,17 @@ objectdef obj_Agents
 		{
 			Logger:Log["obj_Agents:MissionDetails: Starting conversation with agent ${This.ActiveAgent}."]
 			EVE.Agent[${This.AgentIndex}]:StartConversation
+			variable int ConversationWaitCount = 0
 			do
 			{
 				Logger:Log["obj_Agents:MissionDetails: Waiting for conversation window..."]
 				wait 50
+				ConversationWaitCount:Inc
+				if ${ConversationWaitCount} > 12
+				{
+					Logger:Log["obj_Agents:MissionDetails: ERROR: Timed out waiting for conversation window.", LOG_CRITICAL]
+					return
+				}
 			}
 			while !${EVEWindow[byCaption, Agent Conversation](exists)}
 		}
