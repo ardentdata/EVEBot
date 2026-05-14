@@ -69,3 +69,35 @@ When we are ready for the larger merge project:
 3. Create one branch per environment, import only intentional source/config-example changes, and commit those separately.
 4. Diff the two branches against each other to identify conflicts and duplicated fixes.
 5. Merge the reviewed result into `master`, push to `origin`, then use this fork as the source of truth going forward.
+
+## Development And Deployment
+
+Use this repository as the source of truth. Make changes on a topic branch, commit them, merge to `master`, then deploy from `master` to the two InnerSpace installs.
+
+Default test deployment targets:
+
+- local: `C:\InnerSpace\Scripts\EVEBot`
+- remote mapped machine: `V:\Scripts\EVEBot`
+
+Preview a deployment without copying files:
+
+```powershell
+.\tools\Deploy-EVEBot.ps1 -WhatIf
+```
+
+Deploy to both test installs:
+
+```powershell
+.\tools\Deploy-EVEBot.ps1
+```
+
+Deploy only one side:
+
+```powershell
+.\tools\Deploy-EVEBot.ps1 -Target Local
+.\tools\Deploy-EVEBot.ps1 -Target Remote
+```
+
+The deploy tool copies only tracked, intentional deployment files. It does not delete target files, and it skips generated files, backups, logs, debug test scripts, maintenance docs/tools, and local analysis folders.
+
+The deploy tool refuses to run from a dirty working tree unless `-AllowDirty` is passed. Use that override only for temporary local testing.
