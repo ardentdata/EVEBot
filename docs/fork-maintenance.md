@@ -1,0 +1,63 @@
+# EVEBot Fork Maintenance
+
+This checkout is the maintained Ardent Data fork of `CyberTech/EVEBot`.
+
+## Repository Layout
+
+- `origin`: `git@github.com:ardentdata/EVEBot.git`
+- `upstream`: `git@github.com:CyberTech/EVEBot.git`
+- production branch: `master`
+
+Keep upstream and local work separate:
+
+- `upstream/master` is the base source from CyberTech.
+- `origin/master` is the Ardent Data maintained fork.
+- temporary work should happen on `codex/<task-name>` or another topic branch.
+
+## Routine Upstream Check
+
+From the repository root:
+
+```powershell
+.\tools\Update-Upstream.ps1
+```
+
+That fetches `upstream`, reports whether this branch is ahead or behind, and lists upstream commits that are not in the current branch.
+
+When ready to bring upstream changes into the current branch:
+
+```powershell
+.\tools\Update-Upstream.ps1 -Merge
+```
+
+The default merge mode is fast-forward only. If the fork has diverged and needs a merge commit, review the incoming commits first, then run:
+
+```powershell
+.\tools\Update-Upstream.ps1 -Merge -AllowMergeCommit
+```
+
+## Compare A Local EVEBot Tree
+
+Use this when a test environment has hand-edited scripts that need to be inventoried before we merge them into the maintained fork.
+
+```powershell
+.\tools\Compare-EVEBotTree.ps1 -OtherPath "C:\Path\To\Test\EVEBot" -Reference upstream/master -Fetch
+```
+
+Common references:
+
+- `upstream/master`: compare the test tree to the original base source.
+- `HEAD`: compare the test tree to the currently checked-out fork branch.
+- `origin/master`: compare the test tree to the latest pushed Ardent Data master.
+
+The script reports files added, removed, and modified in the other tree. It intentionally ignores `.git`, logs, and the runtime config patterns already ignored by the repository.
+
+## Suggested Merge Plan For Test Environments
+
+When we are ready for the larger merge project:
+
+1. Run `Compare-EVEBotTree.ps1` against each test environment with `-Reference upstream/master`.
+2. Save both outputs so we can classify intentional changes, runtime-only files, and drift from old upstream code.
+3. Create one branch per environment, import only intentional source/config-example changes, and commit those separately.
+4. Diff the two branches against each other to identify conflicts and duplicated fixes.
+5. Merge the reviewed result into `master`, push to `origin`, then use this fork as the source of truth going forward.
