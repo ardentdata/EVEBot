@@ -49,23 +49,56 @@ objectdef obj_Fleet inherits obj_BaseClass
 	{
 		;	Step 1 - Accept fleet invites from my leader
 		; Check both API and modal window (fallback for broken Me.Fleet.Invited)
-		variable bool HasInvite = FALSE
+		variable bool HasModalFleetInvite = FALSE
+		variable bool ApiInviteMatchesLeader = FALSE
+		variable bool ModalInviteMatchesLeader = FALSE
+		variable bool SelfInFleet = FALSE
 
-		if ${Me.Fleet.Invited}
+		if ${EVEWindow[ByName,modal](exists)}
 		{
-			HasInvite:Set[TRUE]
-		}
-		elseif ${EVEWindow[ByName,modal](exists)} && ${EVEWindow[ByName,modal].Text.Find["wants you to join their fleet"]}
-		{
-			HasInvite:Set[TRUE]
-		}
-
-		if ${HasInvite}
-		{
-			; Check if invite is from our leader (check both sources)
-			if ${Me.Fleet.InvitationText.Find[${Config.Fleet.FleetLeader}]} || ${EVEWindow[ByName,modal].Text.Find[${Config.Fleet.FleetLeader}]}
+			if ${EVEWindow[ByName,modal].Text.Find["wants you to join their fleet"]}
 			{
+				HasModalFleetInvite:Set[TRUE]
+			}
+		}
+
+		if ${Me.Fleet.Invited} || ${HasModalFleetInvite}
+		{
+			Logger:Log["obj_Fleet: Fleet invite detected; Me.Fleet.Invited=${Me.Fleet.Invited} modalInvite=${HasModalFleetInvite}", LOG_MINOR]
+
+			if ${Me.Fleet.Invited}
+			{
+				Logger:Log["obj_Fleet: API InvitationText='${Me.Fleet.InvitationText~}'", LOG_MINOR]
+				if ${Me.Fleet.InvitationText.Find["${Config.Fleet.FleetLeader}"]}
+				{
+					ApiInviteMatchesLeader:Set[TRUE]
+				}
+			}
+
+			if ${HasModalFleetInvite}
+			{
+				Logger:Log["obj_Fleet: Modal fleet invite text='${EVEWindow[ByName,modal].Text~}'", LOG_MINOR]
+				if ${EVEWindow[ByName,modal].Text.Find["${Config.Fleet.FleetLeader}"]}
+				{
+					ModalInviteMatchesLeader:Set[TRUE]
+				}
+			}
+
+			if ${ApiInviteMatchesLeader}
+			{
+				Logger:Log["obj_Fleet: Accepting fleet invitation from ${Config.Fleet.FleetLeader} via Me.Fleet:AcceptInvite", LOG_MINOR]
 				Me.Fleet:AcceptInvite
+				return
+			}
+			elseif ${ModalInviteMatchesLeader}
+			{
+				Logger:Log["obj_Fleet: Accepting fleet invitation from ${Config.Fleet.FleetLeader} via modal ClickButtonYes", LOG_MINOR]
+				EVEWindow[ByName,modal]:ClickButtonYes
+				return
+			}
+			else
+			{
+				Logger:Log["obj_Fleet: Fleet invitation did not match configured leader '${Config.Fleet.FleetLeader}'", LOG_MINOR]
 			}
 		}
 
@@ -123,13 +156,25 @@ objectdef obj_Fleet inherits obj_BaseClass
 		}
 		else
 		{
-			if ${Me.Fleet.IsMember[${Me.CharID}]}
+			if ${Me.Fleet.ID(exists)}
+			{
+				if ${Me.Fleet.IsMember[${Me.CharID}]}
+				{
+					SelfInFleet:Set[TRUE]
+				}
+			}
+
+			if ${SelfInFleet}
 			{
 				if !${Me.Fleet.IsMember[${This.ResolveCharID[${Config.Fleet.FleetLeader}]}]}
 				{
 					Logger:Log["obj_Fleet: Fleet Leader (${Config.Fleet.FleetLeader}) is not in the fleet, leaving"]
 					Me.Fleet:LeaveFleet
 				}
+			}
+			elseif ${Me.Fleet.ID(exists)}
+			{
+				Logger:Log["obj_Fleet: Me.Fleet.ID exists but this character is not listed as a fleet member; treating as not in fleet", LOG_MINOR]
 			}
 		}
 	}
