@@ -379,7 +379,9 @@ objectdef obj_Cargo
 			{
 				OreHoldActiveAge:Set[${Math.Calc[${Script.RunningTime} - ${Inventory.ShipGeneralMiningHold.LastMakeActiveAt}]}]
 				Logger:Log["DEBUG: TransferListToOreHold free-space probe: stacks=${ListToMove.Used}, item=${CargoIterator.Value.Name}, qty=${CargoIterator.Value.Quantity}, LastMakeActiveAt=${Inventory.ShipGeneralMiningHold.LastMakeActiveAt}, AgeSinceMakeActive=${OreHoldActiveAge}, MiningHoldIsCurrent=${Inventory.ShipGeneralMiningHold.IsCurrent}", LOG_DEBUG]
+				echo "EVEBOT_INV_DIAG OreHold FreeSpace before stacks=${ListToMove.Used} item=${CargoIterator.Value.Name} age=${OreHoldActiveAge} current=${Inventory.ShipGeneralMiningHold.IsCurrent} running=${Script.RunningTime}"
 				OreHoldFreeSpace:Set[${Ship.OreHoldFreeSpace}]
+				echo "EVEBOT_INV_DIAG OreHold FreeSpace after free=${OreHoldFreeSpace} item=${CargoIterator.Value.Name} running=${Script.RunningTime}"
 				Logger:Log["DEBUG: TransferListToOreHold free-space result: FreeSpace=${OreHoldFreeSpace}, item=${CargoIterator.Value.Name}, qty=${CargoIterator.Value.Quantity}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 				QuantityToMove:Set[${This.CalcAmountToMove[${OreHoldFreeSpace}, ${CargoIterator.Value.Quantity}, ${CargoIterator.Value.Volume}]}]
 

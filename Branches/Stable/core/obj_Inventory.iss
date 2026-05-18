@@ -186,9 +186,11 @@ objectdef obj_EVEWindow_Proxy
 			return TRUE
 		}
 		Logger:Log["\arInventory.${This.ObjectName}: Attempting ${This.GetFallthroughObject}", LOG_STANDARD]
+		echo "EVEBOT_INV_DIAG MakeActive before object=${This.ObjectName} target=${This.GetFallthroughObject} running=${Script.RunningTime}"
 
 		Inventory.${This.ObjectName}:MakeActive
 		LastMakeActiveAt:Set[${Script.RunningTime}]
+		echo "EVEBOT_INV_DIAG MakeActive after object=${This.ObjectName} last=${This.LastMakeActiveAt} running=${Script.RunningTime}"
 		variable int Count = 0
 		; Wait after MakeActive before touching capacity or StackAll; ISXEVE rejects early inventory access.
 		wait 10
@@ -200,6 +202,7 @@ objectdef obj_EVEWindow_Proxy
 			{
 				;Logger:Log["\t\ayInventory.${This.ObjectName}: MakeActive true after ${Count} waits", LOG_STANDARD]
 				Inventory.Current:SetReference[This]
+				echo "EVEBOT_INV_DIAG MakeActive current object=${This.ObjectName} waits=${Count} age=${Math.Calc[${Script.RunningTime} - ${This.LastMakeActiveAt}]} running=${Script.RunningTime}"
 				wait 10
 				return TRUE
 			}
@@ -238,6 +241,11 @@ objectdef obj_EVEWindow_Proxy
 		variable weakref MyThis = This
 
 		if !${EVEWindow[Inventory](exists)}
+		{
+			return FALSE
+		}
+
+		if ${This.InvName.NotNULLOrEmpty} && ${This.InvID} <= 0
 		{
 			return FALSE
 		}
