@@ -364,6 +364,11 @@ objectdef obj_Cargo
 			return FALSE
 		}
 
+		if !${Ship.OreHoldCapacityReady}
+		{
+			return FALSE
+		}
+
 		ListToMove:GetIterator[CargoIterator]
 		if ${CargoIterator:First(exists)}
 		{

@@ -391,27 +391,58 @@ objectdef obj_Ship
 
 	member:float OreHoldMinimumFreeSpace()
 	{
+		if !${This.OreHoldCapacityReady}
+		{
+			return 0
+		}
 		return ${Math.Calc[${This.OreHoldCapacity} * 0.02]}
 	}
 
 	member:float OreHoldFreeSpace()
 	{
+		if !${This.OreHoldCapacityReady}
+		{
+			return -1
+		}
 		return ${Math.Calc[${This.OreHoldCapacity} - ${This.OreHoldUsedCapacity}]}
 	}
 
 	member:float OreHoldCapacity()
 	{
+		if !${This.OreHoldCapacityReady}
+		{
+			return -1
+		}
 		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold].Capacity}
 	}
 
 	member:float OreHoldUsedCapacity()
 	{
+		if !${This.OreHoldCapacityReady}
+		{
+			return -1
+		}
 		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold].UsedCapacity}
+	}
+
+	member:bool OreHoldCapacityReady()
+	{
+		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
+		{
+			return FALSE
+		}
+
+		if ${Inventory.ShipGeneralMiningHold.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${Inventory.ShipGeneralMiningHold.LastMakeActiveAt} + ${Inventory.ShipGeneralMiningHold.MakeActiveSettleMS}]}
+		{
+			return FALSE
+		}
+
+		return TRUE
 	}
 
 	member:bool OreHoldFull()
 	{
-		if ${Inventory.ShipGeneralMiningHold.UsedCapacity} < 0
+		if !${This.OreHoldCapacityReady}
 		{
 			return FALSE
 		}
@@ -425,7 +456,7 @@ objectdef obj_Ship
 
 	member:bool OreHoldHalfFull()
 	{
-		if ${Inventory.ShipGeneralMiningHold.UsedCapacity} < 0
+		if !${This.OreHoldCapacityReady}
 		{
 			return FALSE
 		}
@@ -439,7 +470,7 @@ objectdef obj_Ship
 
 	member:bool OreHoldQuarterFull()
 	{
-		if ${Inventory.ShipGeneralMiningHold.UsedCapacity} < 0
+		if !${This.OreHoldCapacityReady}
 		{
 			return FALSE
 		}
@@ -453,7 +484,7 @@ objectdef obj_Ship
 
 	member:bool OreHoldThreeQuartersFull()
 	{
-		if ${Inventory.ShipGeneralMiningHold.UsedCapacity} < 0
+		if !${This.OreHoldCapacityReady}
 		{
 			return FALSE
 		}
@@ -533,7 +564,7 @@ objectdef obj_Ship
 
 	member:bool CargoFull()
 	{
-		if ${Inventory.ShipCargo.UsedCapacity} < 0
+		if !${This.CargoCapacityReady}
 		{
 			return FALSE
 		}
@@ -547,7 +578,7 @@ objectdef obj_Ship
 
 	member:bool CargoHalfFull()
 	{
-		if ${Inventory.ShipCargo.UsedCapacity} < 0
+		if !${This.CargoCapacityReady}
 		{
 			return FALSE
 		}
@@ -557,6 +588,21 @@ objectdef obj_Ship
 			return TRUE
 		}
 		return FALSE
+	}
+
+	member:bool CargoCapacityReady()
+	{
+		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo](exists)}
+		{
+			return FALSE
+		}
+
+		if ${Inventory.ShipCargo.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${Inventory.ShipCargo.LastMakeActiveAt} + ${Inventory.ShipCargo.MakeActiveSettleMS}]}
+		{
+			return FALSE
+		}
+
+		return TRUE
 	}
 
 	member:bool FuelBayExists()
@@ -684,7 +730,7 @@ objectdef obj_Ship
 
 	member:bool CargoTenthFull()
 	{
-		if ${Inventory.ShipCargo.UsedCapacity} < 0
+		if !${This.CargoCapacityReady}
 		{
 			return FALSE
 		}
