@@ -1664,10 +1664,11 @@ objectdef obj_Cargo
 		call This.ReplenishCrystals
 	}
 
-	function TransferListToShipCorporateHangar(int64 dest)
+	function TransferListToShipCorporateHangar(int64 dest, bool StackAfterTransfer=FALSE)
 	{
 		variable index:int64 ListToMove
 		variable iterator CargoIterator
+		variable bool movedSomething = FALSE
 		This.CargoToTransfer:GetIterator[CargoIterator]
 
 		if ${CargoIterator:First(exists)}
@@ -1689,10 +1690,16 @@ objectdef obj_Cargo
 				{
 					Logger:Log["Moving ${ListToMove.Used} items to hangar."]
 					CargoIterator.Value:MoveTo[${dest}, FleetHangar, ${CargoIterator.Value.Quantity}]
+					movedSomething:Set[TRUE]
 					wait 15
 				}
 			}
 			while ${CargoIterator:Next(exists)}
+
+			if ${StackAfterTransfer} && ${movedSomething} && ${Inventory.EntityFleetHangar.IsCurrent}
+			{
+				call Inventory.EntityFleetHangar.Stack
+			}
 		}
 		else
 		{
@@ -1781,7 +1788,7 @@ objectdef obj_Cargo
 			if ${This.CargoToTransfer.Used} > 0
 			{
 				Logger:Log["Transferring ${This.CargoToTransfer.Used} compressed ore item(s) from cargo to Fleet Hangar"]
-				call This.TransferListToShipCorporateHangar ${dest}
+				call This.TransferListToShipCorporateHangar ${dest} TRUE
 				transferredSomething:Set[TRUE]
 			}
 		}
@@ -1820,7 +1827,7 @@ objectdef obj_Cargo
 			if ${This.CargoToTransfer.Used} > 0
 			{
 				Logger:Log["Transferring ${This.CargoToTransfer.Used} compressed ore item(s) from mining hold to Fleet Hangar"]
-				call This.TransferListToShipCorporateHangar ${dest}
+				call This.TransferListToShipCorporateHangar ${dest} TRUE
 				transferredSomething:Set[TRUE]
 			}
 		}
