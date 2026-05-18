@@ -336,7 +336,7 @@ objectdef obj_Ship
 			return -1
 		}
 
-		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].Capacity}
+		return ${Inventory.ShipCargo.Capacity}
 	}
 
 	member:float CargoUsedCapacity()
@@ -346,7 +346,7 @@ objectdef obj_Ship
 			return -1
 		}
 
-		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].UsedCapacity}
+		return ${Inventory.ShipCargo.UsedCapacity}
 	}
 
 	function StackCargoHold()
@@ -457,7 +457,7 @@ objectdef obj_Ship
 		{
 			return -1
 		}
-		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold].Capacity}
+		return ${Inventory.ShipGeneralMiningHold.Capacity}
 	}
 
 	member:float OreHoldUsedCapacity()
@@ -466,7 +466,7 @@ objectdef obj_Ship
 		{
 			return -1
 		}
-		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold].UsedCapacity}
+		return ${Inventory.ShipGeneralMiningHold.UsedCapacity}
 	}
 
 	member:bool OreHoldCapacityReady()
@@ -547,20 +547,40 @@ objectdef obj_Ship
 
 	member:float CorpHangarMinimumFreeSpace()
 	{
+		variable float FleetHangarCapacity
+
 		if ${Inventory.IsSettling}
 		{
 			return 0
 		}
-		return ${Math.Calc[${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].Capacity} * 0.02]}
+
+		FleetHangarCapacity:Set[${Inventory.ShipFleetHangar.Capacity}]
+		if ${FleetHangarCapacity} <= 0
+		{
+			return 0
+		}
+
+		return ${Math.Calc[${FleetHangarCapacity} * 0.02]}
 	}
 
 	member:float CorpHangarFreeSpace()
 	{
+		variable float FleetHangarCapacity
+		variable float FleetHangarUsedCapacity
+
 		if ${Inventory.IsSettling}
 		{
 			return -1
 		}
-		return ${Math.Calc[${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].Capacity} - ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].UsedCapacity}]}
+
+		FleetHangarCapacity:Set[${Inventory.ShipFleetHangar.Capacity}]
+		FleetHangarUsedCapacity:Set[${Inventory.ShipFleetHangar.UsedCapacity}]
+		if ${FleetHangarCapacity} < 0 || ${FleetHangarUsedCapacity} < 0
+		{
+			return -1
+		}
+
+		return ${Math.Calc[${FleetHangarCapacity} - ${FleetHangarUsedCapacity}]}
 	}
 
 ; TODO - Reported broken - 2020-11-02
@@ -602,6 +622,8 @@ objectdef obj_Ship
 
 	member:bool CorpHangarEmpty()
 	{
+		variable float FleetHangarUsedCapacity
+
 		if ${Inventory.IsSettling}
 		{
 			return FALSE
@@ -609,7 +631,8 @@ objectdef obj_Ship
 
 		This:OpenCorpHangars
 
-		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].UsedCapacity} == 0
+		FleetHangarUsedCapacity:Set[${Inventory.ShipFleetHangar.UsedCapacity}]
+		if ${FleetHangarUsedCapacity} == 0
 		{
 			return TRUE
 		}

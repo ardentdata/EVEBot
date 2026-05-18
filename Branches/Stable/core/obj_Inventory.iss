@@ -31,7 +31,7 @@ objectdef obj_EVEWindow_Proxy
 	variable string EVEWindowParams = ""
 	variable index:item Items
 	variable int LastMakeActiveAt = 0
-	variable int MakeActiveSettleMS = 1500
+	variable int MakeActiveSettleMS = 2500
 
 	method Initialize()
 	{
@@ -210,7 +210,7 @@ objectdef obj_EVEWindow_Proxy
 		{
 			if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.MakeActiveSettleMS}]}
 			{
-				wait 10
+				wait 25
 			}
 			return TRUE
 		}
@@ -221,7 +221,7 @@ objectdef obj_EVEWindow_Proxy
 		LastMakeActiveAt:Set[${Script.RunningTime}]
 		echo "EVEBOT_INV_DIAG MakeActive after object=${This.ObjectName} last=${This.LastMakeActiveAt} running=${Script.RunningTime}"
 		; Wait after MakeActive before touching capacity or StackAll; ISXEVE rejects early inventory access.
-		wait 15
+		wait 25
 		Inventory.Current:SetReference[This]
 		echo "EVEBOT_INV_DIAG MakeActive current object=${This.ObjectName} trusted=TRUE age=${Math.Calc[${Script.RunningTime} - ${This.LastMakeActiveAt}]} running=${Script.RunningTime}"
 		return TRUE
