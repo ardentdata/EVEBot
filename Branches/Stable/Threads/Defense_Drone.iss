@@ -71,6 +71,12 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 	;This method is triggered by an event.  If triggered, it means a team-mate is under attack by an NPC and what it is.
 	method Event_AttackerReport(int64 ReporterID, int64 AttackerID)
 	{
+		if !${This.IsSafeDefenseTarget[${AttackerID}]}
+		{
+			Logger:Log["${LogPrefix}: Ignored unsafe or unavailable attacker report ${AttackerID} from ${ReporterID}", LOG_DEBUG]
+			return
+		}
+
 		if ${This.isKnownHostile[${AttackerID}]}
 		{
 			Logger:Log["${LogPrefix}:Event_AttackerReport Ignored ${AttackerID} from ${ReporterID}, already known", LOG_DEBUG]
@@ -267,6 +273,13 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 			This:ClearCurrentTarget["target out of drone control range"]
 			return
 		}
+
+		if !${This.IsSafeDefenseTarget[${This.CurrentTarget.ID}]}
+		{
+			This:RemoveHostile[${This.CurrentTarget.ID}]
+			This:ClearCurrentTarget["target is not safe for drone defense"]
+			return
+		}
 	}
 
 	member:bool isReporterPresent(int64 ReporterID)
@@ -341,6 +354,54 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 		return FALSE
 	}
 
+	member:bool IsEmpireDefenseTarget(int64 HostileID)
+	{
+		if ${Entity[${HostileID}].Name.Find["Sentry Gun"]} > 0 || \
+			${Entity[${HostileID}].Name.Find["CONCORD"]} > 0 || \
+			${Entity[${HostileID}].Name.Find["Police"]} > 0 || \
+			${Entity[${HostileID}].Name.Find["Customs"]} > 0 || \
+			${Entity[${HostileID}].Name.Find["Navy"]} > 0 || \
+			${Entity[${HostileID}].Name.Find["Federation"]} > 0 || \
+			${Entity[${HostileID}].Name.Find["Republic Fleet"]} > 0 || \
+			${Entity[${HostileID}].Name.Find["State "]} > 0 || \
+			${Entity[${HostileID}].Name.Find["Imperial "]} > 0
+		{
+			return TRUE
+		}
+
+		return FALSE
+	}
+
+	member:bool IsSafeDefenseTarget(int64 HostileID)
+	{
+		if !${Me.InSpace}
+		{
+			return FALSE
+		}
+
+		if !${Entity[${HostileID}](exists)}
+		{
+			return FALSE
+		}
+
+		if !${Entity[${HostileID}].IsNPC} || ${Entity[${HostileID}].IsMoribund}
+		{
+			return FALSE
+		}
+
+		if ${This.IsIgnoredGridHostile[${Entity[${HostileID}].GroupID}]} || ${This.IsEmpireDefenseTarget[${HostileID}]}
+		{
+			return FALSE
+		}
+
+		if ${Me.GetStanding[${HostileID}]} > 0
+		{
+			return FALSE
+		}
+
+		return TRUE
+	}
+
 	method CheckGridHostiles()
 	{
 		variable iterator GridHostile
@@ -352,7 +413,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 		{
 			do
 			{
-				if !${This.IsIgnoredGridHostile[${GridHostile.Value.GroupID}]} && !${This.isKnownHostile[${GridHostile.Value.ID}]}
+				if ${This.IsSafeDefenseTarget[${GridHostile.Value.ID}]} && !${This.isKnownHostile[${GridHostile.Value.ID}]}
 				{
 					Logger:Log["${LogPrefix}: Proactively alerting team to kill ${GridHostile.Value.Name}(${GridHostile.Value.ID})"]
 					relay all "Event[EVEBot_AttackerReport]:Execute[${MyShip.ID}, ${GridHostile.Value.ID}]"
@@ -469,7 +530,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 		if ${CurrentHostile:First(exists)}
 		do
 		{
-			if !${Entity[${CurrentHostile.Value.HostileID}](exists)}
+			if !${This.IsSafeDefenseTarget[${CurrentHostile.Value.HostileID}]}
 			{
 				This:RemoveHostile[${CurrentHostile.Value.HostileID}]
 				CurrentHostile:First
@@ -507,7 +568,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 		if ${CurrentHostile:First(exists)}
 		do
 		{
-			if !${Entity[${CurrentHostile.Value.HostileID}](exists)}
+			if !${This.IsSafeDefenseTarget[${CurrentHostile.Value.HostileID}]}
 			{
 				This:RemoveHostile[${CurrentHostile.Value.HostileID}]
 				CurrentHostile:First
@@ -557,9 +618,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 		if ${CurrentHostile:First(exists)}
 		do
 		{
-			if ${Entity[${CurrentHostile.Value.HostileID}](exists)} && \
-				${Entity[${CurrentHostile.Value.HostileID}].WreckID} == -1 && \
-				${Entity[${CurrentHostile.Value.HostileID}].GroupID} != GROUPID_WRECK && \
+			if ${This.IsSafeDefenseTarget[${CurrentHostile.Value.HostileID}]} && \
 				${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Ship.OptimalTargetingRange} && \
 				${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Me.DroneControlDistance} && \
 				(${Entity[${CurrentHostile.Value.HostileID}].IsLockedTarget} || ${Entity[${CurrentHostile.Value.HostileID}].BeingTargeted})
@@ -583,12 +642,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 				return
 			}
 
-			if !${Entity[${CurrentHostile.Value.HostileID}](exists)}
-			{
-				continue
-			}
-
-			if ${Entity[${CurrentHostile.Value.HostileID}].WreckID} != -1 || ${Entity[${CurrentHostile.Value.HostileID}].GroupID} == GROUPID_WRECK
+			if !${This.IsSafeDefenseTarget[${CurrentHostile.Value.HostileID}]}
 			{
 				continue
 			}
