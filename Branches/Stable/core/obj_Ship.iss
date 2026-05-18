@@ -1133,6 +1133,24 @@ objectdef obj_Ship
 		return ${count}
 	}
 
+	member:bool IndustrialCoreActiveOrDeactivating()
+	{
+		variable iterator ModuleIter
+
+		This.ModuleList_IndustryCore:GetIterator[ModuleIter]
+		if ${ModuleIter:First(exists)}
+		do
+		{
+			if ${ModuleIter.Value.IsActive} || ${ModuleIter.Value.IsDeactivating}
+			{
+				return TRUE
+			}
+		}
+		while ${ModuleIter:Next(exists)}
+
+		return FALSE
+	}
+
 	member:int NotActivecompressor()
 	{
 		variable int count

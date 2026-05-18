@@ -1387,6 +1387,14 @@ TODO - integrate in most of the flyto*
 		Ship:Deactivate_Gang_Links[]
 		Ship:DeactivateAllMiningLasers[]
 		Ship:UnlockAllTargets[]
+
+		Ship:DeactivateIndustrialCore[]
+		if ${Ship.IndustrialCoreActiveOrDeactivating}
+		{
+			Logger:Log["${LogPrefix} - ReadyToWarp: Delaying warp; industrial core active/deactivating", LOG_DEBUG]
+			return FALSE
+		}
+
 		return TRUE
 	}
 
