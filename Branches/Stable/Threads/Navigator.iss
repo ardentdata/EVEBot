@@ -127,6 +127,7 @@ objectdef obj_Navigator inherits obj_BaseClass
 	variable index:obj_Destination Destinations
 
 	variable time StateChanged
+	variable time NextIndustrialCoreWarpDelayLog
 	variable obj_PulseTimer DelayTimer
 
 	; Any new destination actions need to be copied to obj_Destination:Initialize and obj_Destination:ToString
@@ -1391,7 +1392,13 @@ TODO - integrate in most of the flyto*
 		Ship:DeactivateIndustrialCore[]
 		if ${Ship.IndustrialCoreActiveOrDeactivating}
 		{
-			Logger:Log["${LogPrefix} - ReadyToWarp: Delaying warp; industrial core active/deactivating", LOG_DEBUG]
+			if ${Time.Timestamp} >= ${This.NextIndustrialCoreWarpDelayLog.Timestamp}
+			{
+				Logger:Log["${LogPrefix} - ReadyToWarp: Delaying warp; industrial core active/deactivating", LOG_DEBUG]
+				This.NextIndustrialCoreWarpDelayLog:Set[${Time.Timestamp}]
+				This.NextIndustrialCoreWarpDelayLog.Second:Inc[15]
+				This.NextIndustrialCoreWarpDelayLog:Update
+			}
 			return FALSE
 		}
 
