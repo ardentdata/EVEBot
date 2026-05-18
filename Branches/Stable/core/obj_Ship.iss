@@ -406,42 +406,30 @@ objectdef obj_Ship
 
 	function ActivateFuelBay()
 	{
-		Logger:Log["DEBUG: ActivateFuelBay called, FuelBayExists=${This.FuelBayExists}", LOG_DEBUG]
-
 		; First, ensure inventory window is open
 		if !${EVEWindow[Inventory](exists)}
 		{
-			Logger:Log["DEBUG: Opening inventory window...", LOG_DEBUG]
 			EVE:Execute[OpenInventory]
 			; Wait for inventory window to open
 			wait 20
-		}
-		else
-		{
-			Logger:Log["DEBUG: Inventory window already open", LOG_DEBUG]
 		}
 
 		variable string WindowName = ${This.FuelBayWindowName}
 		if ${WindowName.Equal[""]}
 		{
-			Logger:Log["DEBUG: FuelBay child window does not exist after opening inventory", LOG_DEBUG]
+			Logger:Log["FuelBay child window does not exist after opening inventory", LOG_DEBUG]
 			return
 		}
-
-		Logger:Log["DEBUG: Activating fuel bay window: ${WindowName}", LOG_DEBUG]
 
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}](exists)}
 		{
 			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}]:MakeActive
 			LastFuelBayMakeActiveAt:Set[${Script.RunningTime}]
 			wait 10
-			Logger:Log["DEBUG: Fuel bay window activated: Window=${WindowName}, LastFuelBayMakeActiveAt=${This.LastFuelBayMakeActiveAt}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
-			Logger:Log["DEBUG: Fuel bay LocationFlag: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlag}", LOG_DEBUG]
-			Logger:Log["DEBUG: Fuel bay LocationFlagID: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlagID}", LOG_DEBUG]
 		}
 		else
 		{
-			Logger:Log["DEBUG: ERROR - ChildWindow does not exist!", LOG_DEBUG]
+			Logger:Log["FuelBay child window does not exist: ${WindowName}", LOG_DEBUG]
 		}
 	}
 

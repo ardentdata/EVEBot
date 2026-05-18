@@ -920,12 +920,8 @@ objectdef obj_Orca
 		; Check fuel bay level every 60 seconds
 		if ${Time.Timestamp} >= ${This.NextFuelBayCheck.Timestamp}
 		{
-			Logger:Log["DEBUG: Fuel bay check timer triggered", LOG_DEBUG]
-
 			; Activate fuel bay window to get valid capacity values
 			call Ship.ActivateFuelBay
-
-			Logger:Log["DEBUG: FuelBayExists = ${Ship.FuelBayExists}, WindowName = '${Ship.FuelBayWindowName}'", LOG_DEBUG]
 
 			if ${Ship.FuelBayBelowHalf}
 			{
@@ -947,10 +943,6 @@ objectdef obj_Orca
 						Logger:Log["DEBUG: No heavy water in cargo but fuel bay not empty yet (has ${Ship.FuelBayUsedCapacity}/${Ship.FuelBayCapacity})", LOG_DEBUG]
 					}
 				}
-			}
-			else
-			{
-				Logger:Log["DEBUG: Fuel bay OK (above 50%)", LOG_DEBUG]
 			}
 
 			This.NextFuelBayCheck:Set[${Time.Timestamp}]

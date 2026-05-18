@@ -71,6 +71,36 @@ objectdef obj_EVEWindow_Proxy
 		return "EVEWindow[Inventory].ChildWindow[${EVEWindowParams}]"
 	}
 
+	member:float Capacity()
+	{
+		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.MakeActiveSettleMS}]}
+		{
+			return -1
+		}
+
+		if ${Inventory.IsSettling}
+		{
+			return -1
+		}
+
+		return ${${This.GetFallthroughObject}.Capacity}
+	}
+
+	member:float UsedCapacity()
+	{
+		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.MakeActiveSettleMS}]}
+		{
+			return -1
+		}
+
+		if ${Inventory.IsSettling}
+		{
+			return -1
+		}
+
+		return ${${This.GetFallthroughObject}.UsedCapacity}
+	}
+
 /*
   ~ ChildWindow[ID#]                     :: the first child with the given ID#
   ~ ChildWindow[ID#,"NAME"]              :: the child with the given ID# and the given "NAME" (PREFERRED)
