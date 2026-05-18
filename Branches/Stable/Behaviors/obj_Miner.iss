@@ -889,6 +889,32 @@ objectdef obj_Miner
 
 						if ${Entity[${Orca.Escape}](exists)} && ${Entity[${Orca.Escape}].Distance} <= LOOT_RANGE
 						{
+							call This.TransferCompressedOreToOrcaIfAvailable
+							if ${Return}
+							{
+								break
+							}
+
+							if ${Config.Miner.CompressOreMode}
+							{
+								if ${ForceCompress}
+								{
+									call Compress.CheckForCompression
+									if ${Return}
+									{
+										call This.TransferCompressedOreToOrcaIfAvailable
+									}
+									break
+								}
+
+								if !${EVEBOT_Compression_Needed}
+								{
+									Logger:Log["Debug: Full mining hold needs Orca compression before unload"]
+									relay all -event EVEBOT_Compression_Needed TRUE
+								}
+								break
+							}
+
 							call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}].ID}
 						}
 
