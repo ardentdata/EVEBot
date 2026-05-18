@@ -28,6 +28,8 @@ objectdef obj_Miner
 	variable bool StopCompressing = FALSE
 	; Flag to signal compression request from atomic event handler (cannot call wait from atoms)
 	variable bool CompressionRequested = FALSE
+	variable int NextCompressedOreTransferToOrcaAt = 0
+	variable int CompressedOreTransferToOrcaIntervalMS = 30000
 
 	;	Are we running out of asteroids to target?
 	variable bool ConcentrateFire = FALSE
@@ -1499,6 +1501,14 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 		{
 			return FALSE
 		}
+
+		if ${Script.RunningTime} < ${This.NextCompressedOreTransferToOrcaAt} && !${Ship.OreHoldThreeQuartersFull}
+		{
+			return FALSE
+		}
+
+		NextCompressedOreTransferToOrcaAt:Set[${Script.RunningTime}]
+		NextCompressedOreTransferToOrcaAt:Inc[${CompressedOreTransferToOrcaIntervalMS}]
 
 		call Cargo.TransferCompressedOreToShipFleetHangar ${Entity[${Orca.Escape}].ID}
 		return ${Return}

@@ -31,7 +31,7 @@ objectdef obj_EVEWindow_Proxy
 	variable string EVEWindowParams = ""
 	variable index:item Items
 	variable int LastMakeActiveAt = 0
-	variable int MakeActiveSettleMS = 1000
+	variable int MakeActiveSettleMS = 1500
 
 	method Initialize()
 	{
@@ -191,28 +191,11 @@ objectdef obj_EVEWindow_Proxy
 		Inventory.${This.ObjectName}:MakeActive
 		LastMakeActiveAt:Set[${Script.RunningTime}]
 		echo "EVEBOT_INV_DIAG MakeActive after object=${This.ObjectName} last=${This.LastMakeActiveAt} running=${Script.RunningTime}"
-		variable int Count = 0
 		; Wait after MakeActive before touching capacity or StackAll; ISXEVE rejects early inventory access.
-		wait 10
-		do
-		{
-			; Wait up to 5 seconds for window to become current
-			wait 1
-			if ${This.IsCurrent}
-			{
-				;Logger:Log["\t\ayInventory.${This.ObjectName}: MakeActive true after ${Count} waits", LOG_STANDARD]
-				Inventory.Current:SetReference[This]
-				echo "EVEBOT_INV_DIAG MakeActive current object=${This.ObjectName} waits=${Count} age=${Math.Calc[${Script.RunningTime} - ${This.LastMakeActiveAt}]} running=${Script.RunningTime}"
-				wait 10
-				return TRUE
-			}
-
-			Count:Inc
-		}
-		while (${Count} < 50)
-
-		Logger:Log["\t\arInventory.${This.ObjectName}: MakeActive timed out: ${This.GetFallthroughObject}", LOG_CRITICAL]
-		return FALSE
+		wait 15
+		Inventory.Current:SetReference[This]
+		echo "EVEBOT_INV_DIAG MakeActive current object=${This.ObjectName} trusted=TRUE age=${Math.Calc[${Script.RunningTime} - ${This.LastMakeActiveAt}]} running=${Script.RunningTime}"
+		return TRUE
 	}
 
 	; Check that the ID/Name/Location match the current ActiveChild of the Inventory window

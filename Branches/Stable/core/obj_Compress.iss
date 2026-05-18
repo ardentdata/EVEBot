@@ -10,7 +10,7 @@ BUGS:
 objectdef obj_Compress inherits obj_BaseClass
 {
 	variable int NextRawOreCheckAt = 0
-	variable int RawOreCheckIntervalMS = 15000
+	variable int RawOreCheckIntervalMS = 5000
 
 	method Initialize()
 	{

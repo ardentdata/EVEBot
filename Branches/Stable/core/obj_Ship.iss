@@ -382,7 +382,7 @@ objectdef obj_Ship
 			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}]:MakeActive
 			LastFuelBayMakeActiveAt:Set[${Script.RunningTime}]
 			echo "EVEBOT_INV_DIAG FuelBay MakeActive after window=${WindowName} last=${This.LastFuelBayMakeActiveAt} running=${Script.RunningTime}"
-			wait 5
+			wait 10
 			echo "EVEBOT_INV_DIAG FuelBay MakeActive waitdone window=${WindowName} age=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]} running=${Script.RunningTime}"
 			Logger:Log["DEBUG: Fuel bay window activated: Window=${WindowName}, LastFuelBayMakeActiveAt=${This.LastFuelBayMakeActiveAt}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 			Logger:Log["DEBUG: Fuel bay LocationFlag: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlag}", LOG_DEBUG]
