@@ -926,7 +926,6 @@ objectdef obj_Orca
 			call Ship.ActivateFuelBay
 
 			Logger:Log["DEBUG: FuelBayExists = ${Ship.FuelBayExists}, WindowName = '${Ship.FuelBayWindowName}'", LOG_DEBUG]
-			Logger:Log["DEBUG: FuelBayCapacity = ${Ship.FuelBayCapacity}, Used = ${Ship.FuelBayUsedCapacity}", LOG_DEBUG]
 
 			if ${Ship.FuelBayBelowHalf}
 			{
