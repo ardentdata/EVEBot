@@ -873,6 +873,7 @@ objectdef obj_Cargo
 		if ${TotalMoved} > 0
 		{
 			Logger:Log["Transferred ${TotalMoved} Heavy Water to fuel bay", LOG_MINOR]
+			call Inventory.ShipCargo.Stack
 			return TRUE
 		}
 
