@@ -929,6 +929,10 @@ objectdef obj_Miner
 		if (${ForceCompress} && ${Config.Miner.CompressOreMode})
 		{
 			call Compress.CheckForCompression
+			if ${Return}
+			{
+				call This.TransferCompressedOreToOrcaIfAvailable
+			}
 		}
 		; lets stack our ore
 		if (${StopCompressing} && ${Ship.OreHoldTenthFull} && ${Config.Miner.CompressOreMode})
@@ -1448,6 +1452,29 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 			}
 		}
 	}
+
+	function TransferCompressedOreToOrcaIfAvailable()
+	{
+		if !${Config.Miner.DeliveryLocationTypeName.Equal[Orca]}
+		{
+			return FALSE
+		}
+
+		Orca:Set[Name = "${Config.Miner.DeliveryLocation}"]
+		if !${Entity[${Orca.Escape}](exists)}
+		{
+			return FALSE
+		}
+
+		if ${Entity[${Orca.Escape}].Distance} > LOOT_RANGE
+		{
+			return FALSE
+		}
+
+		call Cargo.TransferCompressedOreToShipFleetHangar ${Entity[${Orca.Escape}].ID}
+		return ${Return}
+	}
+
 	;This method is triggered by an event. If triggered, it tells us that our miners are almost full and they need to compress.
 	;NOTE: This sets a flag rather than performing blocking operations. The actual compression logic is handled in the Pulse() method by checking the CompressionRequested flag.
 	method Event_Compression(bool Compression_On)
