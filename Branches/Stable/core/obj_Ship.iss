@@ -308,11 +308,20 @@ objectdef obj_Ship
 
 	member:float CargoMinimumFreeSpace()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return 0
+		}
 		return ${Math.Calc[${MyShip.CargoCapacity}*0.02]}
 	}
 
 	member:float CargoFreeSpace()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return -1
+		}
+
 		if ${MyShip.UsedCargoCapacity} < 0
 		{
 			return ${MyShip.UsedCargoCapacity}
@@ -378,12 +387,9 @@ objectdef obj_Ship
 
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}](exists)}
 		{
-			echo "EVEBOT_INV_DIAG FuelBay MakeActive before window=${WindowName} running=${Script.RunningTime}"
 			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}]:MakeActive
 			LastFuelBayMakeActiveAt:Set[${Script.RunningTime}]
-			echo "EVEBOT_INV_DIAG FuelBay MakeActive after window=${WindowName} last=${This.LastFuelBayMakeActiveAt} running=${Script.RunningTime}"
 			wait 10
-			echo "EVEBOT_INV_DIAG FuelBay MakeActive waitdone window=${WindowName} age=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]} running=${Script.RunningTime}"
 			Logger:Log["DEBUG: Fuel bay window activated: Window=${WindowName}, LastFuelBayMakeActiveAt=${This.LastFuelBayMakeActiveAt}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 			Logger:Log["DEBUG: Fuel bay LocationFlag: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlag}", LOG_DEBUG]
 			Logger:Log["DEBUG: Fuel bay LocationFlagID: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlagID}", LOG_DEBUG]
@@ -432,6 +438,11 @@ objectdef obj_Ship
 
 	member:bool OreHoldCapacityReady()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return FALSE
+		}
+
 		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
 		{
 			return FALSE
@@ -503,11 +514,19 @@ objectdef obj_Ship
 
 	member:float CorpHangarMinimumFreeSpace()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return 0
+		}
 		return ${Math.Calc[${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].Capacity} * 0.02]}
 	}
 
 	member:float CorpHangarFreeSpace()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return -1
+		}
 		return ${Math.Calc[${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].Capacity} - ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].UsedCapacity}]}
 	}
 
@@ -550,6 +569,11 @@ objectdef obj_Ship
 
 	member:bool CorpHangarEmpty()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return FALSE
+		}
+
 		This:OpenCorpHangars
 
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar].UsedCapacity} == 0
@@ -597,6 +621,11 @@ objectdef obj_Ship
 
 	member:bool CargoCapacityReady()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return FALSE
+		}
+
 		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo](exists)}
 		{
 			return FALSE
@@ -648,25 +677,31 @@ objectdef obj_Ship
 
 	member:float FuelBayCapacity()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return 0
+		}
+
 		if !${This.FuelBayExists}
 		{
 			return 0
 		}
 		variable string WindowName = ${This.FuelBayWindowName}
-		Logger:Log["DEBUG: FuelBayCapacity read: Window=${WindowName}, AgeSinceMakeActive=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
-		echo "EVEBOT_INV_DIAG FuelBay Capacity before window=${WindowName} age=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]} running=${Script.RunningTime}"
 		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].Capacity}
 	}
 
 	member:float FuelBayUsedCapacity()
 	{
+		if ${Inventory.IsSettling}
+		{
+			return 0
+		}
+
 		if !${This.FuelBayExists}
 		{
 			return 0
 		}
 		variable string WindowName = ${This.FuelBayWindowName}
-		Logger:Log["DEBUG: FuelBayUsedCapacity read: Window=${WindowName}, AgeSinceMakeActive=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
-		echo "EVEBOT_INV_DIAG FuelBay UsedCapacity before window=${WindowName} age=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]} running=${Script.RunningTime}"
 		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].UsedCapacity}
 	}
 

@@ -363,6 +363,31 @@ objectdef obj_Inventory inherits obj_BaseClass
 	{
 	}
 
+	member:bool IsSettling()
+	{
+		if ${This.ShipCargo.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipCargo.LastMakeActiveAt} + ${This.ShipCargo.MakeActiveSettleMS}]}
+		{
+			return TRUE
+		}
+
+		if ${This.ShipFleetHangar.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipFleetHangar.LastMakeActiveAt} + ${This.ShipFleetHangar.MakeActiveSettleMS}]}
+		{
+			return TRUE
+		}
+
+		if ${This.ShipGeneralMiningHold.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipGeneralMiningHold.LastMakeActiveAt} + ${This.ShipGeneralMiningHold.MakeActiveSettleMS}]}
+		{
+			return TRUE
+		}
+
+		if ${This.EntityFleetHangar.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.EntityFleetHangar.LastMakeActiveAt} + ${This.EntityFleetHangar.MakeActiveSettleMS}]}
+		{
+			return TRUE
+		}
+
+		return FALSE
+	}
+
 	function Open()
 	{
 		if !${EVEWindow[Inventory](exists)}
