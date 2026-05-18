@@ -926,18 +926,14 @@ objectdef obj_Miner
 			relay all -event EVEBOT_Compression_Needed TRUE
 		}
 		; lets compress
-		if (${ForceCompress} && ${Ship.OreHoldQuarterFull} && ${Config.Miner.CompressOreMode})
+		if (${ForceCompress} && ${Config.Miner.CompressOreMode})
 		{
 			call Compress.CheckForCompression
 		}
 		; lets stack our ore
 		if (${StopCompressing} && ${Ship.OreHoldTenthFull} && ${Config.Miner.CompressOreMode})
 		{
-			; Stack ore hold - eliminated unnecessary MakeActive and wait
-			if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
-			{
-				EVEWindow[Inventory]:StackAll
-			}
+			call Ship.StackOreHold
 			relay all -event EVEBOT_Compression_Off FALSE
 			StopCompressing:Set[FALSE]
 		}

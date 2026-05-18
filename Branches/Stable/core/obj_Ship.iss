@@ -325,8 +325,10 @@ objectdef obj_Ship
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo](exists)}
 		{
 			call Inventory.ShipCargo.Activate
-			wait 2
-			EVEWindow[Inventory]:StackAll
+			if ${Inventory.ShipCargo.IsCurrent}
+			{
+				call Inventory.ShipCargo.Stack
+			}
 			return TRUE
 		}
 		return FALSE
@@ -338,8 +340,10 @@ objectdef obj_Ship
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
 		{
 			call Inventory.ShipGeneralMiningHold.Activate
-			wait 2
-			EVEWindow[Inventory]:StackAll
+			if ${Inventory.ShipGeneralMiningHold.IsCurrent}
+			{
+				call Inventory.ShipGeneralMiningHold.Stack
+			}
 			return TRUE
 		}
 		return FALSE

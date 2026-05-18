@@ -30,6 +30,8 @@ objectdef obj_EVEWindow_Proxy
 	variable string InvLocation = ""
 	variable string EVEWindowParams = ""
 	variable index:item Items
+	variable int LastMakeActiveAt = 0
+	variable int MakeActiveSettleMS = 1000
 
 	method Initialize()
 	{
@@ -177,14 +179,19 @@ objectdef obj_EVEWindow_Proxy
 		if ${Inventory.${This.ObjectName}.IsActive}
 		{
 			Logger:Log["\arInventory.${This.ObjectName}: Already active", LOG_DEBUG]
+			if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.MakeActiveSettleMS}]}
+			{
+				wait 10
+			}
 			return TRUE
 		}
 		Logger:Log["\arInventory.${This.ObjectName}: Attempting ${This.GetFallthroughObject}", LOG_STANDARD]
 
 		Inventory.${This.ObjectName}:MakeActive
+		LastMakeActiveAt:Set[${Script.RunningTime}]
 		variable int Count = 0
-		; Wait after MakeActive to ensure window is ready before checking IsCurrent (300ms)
-		wait 3
+		; Wait after MakeActive before touching capacity or StackAll; ISXEVE rejects early inventory access.
+		wait 10
 		do
 		{
 			; Wait up to 5 seconds for window to become current
@@ -193,8 +200,7 @@ objectdef obj_EVEWindow_Proxy
 			{
 				;Logger:Log["\t\ayInventory.${This.ObjectName}: MakeActive true after ${Count} waits", LOG_STANDARD]
 				Inventory.Current:SetReference[This]
-				; Wait after window becomes current to ensure it's fully ready (200ms)
-				wait 2
+				wait 10
 				return TRUE
 			}
 
@@ -278,11 +284,10 @@ objectdef obj_EVEWindow_Proxy
 
 	function Stack()
 	{
-		; Wait before StackAll to ensure window is active and ready (200ms)
-		wait 2
+		; Wait before StackAll to ensure window is active and ready.
+		wait 10
 		Inventory.${This.ObjectName}:StackAll
-		; Wait after StackAll before returning to prevent timing issues (200ms)
-		wait 2
+		wait 5
 	}
 
 	method DebugPrintInvData()
