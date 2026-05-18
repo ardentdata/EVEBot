@@ -1628,6 +1628,8 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 	;	*	ForceDropoff (Usually means we need drones)
 	member:bool MinerFull()
 	{
+		variable bool CargoLimitReached = FALSE
+
 		if ${ForceDropoff}
 		{
 			Return TRUE
@@ -1641,7 +1643,17 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 					return TRUE
 				}
 			}
-			elseif ${Ship.CargoFreeSpace} < 1000 || ${MyShip.UsedCargoCapacity} > ${Config.Miner.CargoThreshold}
+			else
+			{
+				if ${Ship.CargoCapacityReady}
+				{
+					if ${Ship.CargoFreeSpace} < 1000 || ${Ship.CargoUsedCapacity} > ${Config.Miner.CargoThreshold}
+					{
+						CargoLimitReached:Set[TRUE]
+					}
+				}
+			}
+			if ${CargoLimitReached}
 			{
 				return TRUE
 			}
@@ -1655,7 +1667,17 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 					return TRUE
 				}
 			}
-			elseif ${Ship.CargoFreeSpace} < ${Ship.CargoMinimumFreeSpace} || ${MyShip.UsedCargoCapacity} > ${Config.Miner.CargoThreshold}
+			else
+			{
+				if ${Ship.CargoCapacityReady}
+				{
+					if ${Ship.CargoFreeSpace} < ${Ship.CargoMinimumFreeSpace} || ${Ship.CargoUsedCapacity} > ${Config.Miner.CargoThreshold}
+					{
+						CargoLimitReached:Set[TRUE]
+					}
+				}
+			}
+			if ${CargoLimitReached}
 			{
 				return TRUE
 			}

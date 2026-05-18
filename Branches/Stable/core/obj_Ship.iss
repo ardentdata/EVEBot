@@ -308,25 +308,45 @@ objectdef obj_Ship
 
 	member:float CargoMinimumFreeSpace()
 	{
-		if ${Inventory.IsSettling}
+		if !${This.CargoCapacityReady}
 		{
 			return 0
 		}
-		return ${Math.Calc[${MyShip.CargoCapacity}*0.02]}
+		return ${Math.Calc[${This.CargoCapacity}*0.02]}
 	}
 
 	member:float CargoFreeSpace()
 	{
-		if ${Inventory.IsSettling}
+		if !${This.CargoCapacityReady}
 		{
 			return -1
 		}
 
-		if ${MyShip.UsedCargoCapacity} < 0
+		if ${This.CargoUsedCapacity} < 0
 		{
-			return ${MyShip.UsedCargoCapacity}
+			return ${This.CargoUsedCapacity}
 		}
-		return ${Math.Calc[${MyShip.CargoCapacity}-${MyShip.UsedCargoCapacity}]}
+		return ${Math.Calc[${This.CargoCapacity}-${This.CargoUsedCapacity}]}
+	}
+
+	member:float CargoCapacity()
+	{
+		if !${This.CargoCapacityReady}
+		{
+			return -1
+		}
+
+		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].Capacity}
+	}
+
+	member:float CargoUsedCapacity()
+	{
+		if !${This.CargoCapacityReady}
+		{
+			return -1
+		}
+
+		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].UsedCapacity}
 	}
 
 	function StackCargoHold()
@@ -637,7 +657,7 @@ objectdef obj_Ship
 			return FALSE
 		}
 
-		if ${This.CargoFreeSpace} <= ${Math.Calc[${MyShip.CargoCapacity}*0.50]}
+		if ${This.CargoFreeSpace} <= ${Math.Calc[${This.CargoCapacity}*0.50]}
 		{
 			return TRUE
 		}
@@ -804,7 +824,7 @@ objectdef obj_Ship
 			return FALSE
 		}
 
-		if ${This.CargoNoCrystals} >= ${Math.Calc[${MyShip.CargoCapacity}*0.10]}
+		if ${This.CargoNoCrystals} >= ${Math.Calc[${This.CargoCapacity}*0.10]}
 		{
 			return TRUE
 		}
@@ -1224,7 +1244,10 @@ objectdef obj_Ship
 	method UpdateBaselineUsedCargo()
 	{
 		; Store the used cargo space as the cargo hold exists NOW, with whatever is leftover in it.
-		This.BaselineUsedCargo:Set[${MyShip.UsedCargoCapacity.Ceil}]
+		if ${This.CargoCapacityReady}
+		{
+			This.BaselineUsedCargo:Set[${This.CargoUsedCapacity.Ceil}]
+		}
 	}
 
 	member:int MaxLockedTargets()

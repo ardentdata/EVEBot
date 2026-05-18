@@ -178,7 +178,6 @@ objectdef obj_EVEWindow_Proxy
 
 		if ${Inventory.${This.ObjectName}.IsActive}
 		{
-			Logger:Log["\arInventory.${This.ObjectName}: Already active", LOG_DEBUG]
 			if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.MakeActiveSettleMS}]}
 			{
 				wait 10
