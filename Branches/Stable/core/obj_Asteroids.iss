@@ -398,8 +398,11 @@ objectdef obj_Asteroids
 ; This is adding duplicates because the oretypes are treated as substrings
 			do
 			{
+				variable string OreQueryName
+				OreQueryName:Set[${Ship.GetBaseCrystalOreType[${OreTypeIterator.Key}]}]
+
 				variable string QueryStrPrefix
-				QueryStrPrefix:Set["CategoryID = ${This.AsteroidCategoryID} && Name =- \"${OreTypeIterator.Key}\""]
+				QueryStrPrefix:Set["CategoryID = ${This.AsteroidCategoryID} && Name =- \"${OreQueryName}\""]
 				; This is intended to get the desired ore in the system before others do.  Its not
 				; intended to empty a given radius of asteroids
 				if ${Config.Miner.StripMine}

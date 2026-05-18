@@ -57,6 +57,10 @@ objectdef obj_Ship
 
 	variable set SimpleCrystalOres
 	variable set CoherentCrystalOres
+	variable set VariegatedCrystalOres
+	variable set ComplexCrystalOres
+	variable set MercoxitCrystalOres
+	variable set AbyssalCrystalOres
 
 	method Initialize()
 	{
@@ -80,11 +84,47 @@ objectdef obj_Ship
 		SimpleCrystalOres:Add["Scordite"]
 		SimpleCrystalOres:Add["Pyroxeres"]
 		SimpleCrystalOres:Add["Plagioclase"]
+		SimpleCrystalOres:Add["Mordunium"]
 
 		; Coherent Asteroid Mining Crystal ores
 		CoherentCrystalOres:Clear
 		CoherentCrystalOres:Add["Omber"]
 		CoherentCrystalOres:Add["Kernite"]
+		CoherentCrystalOres:Add["Jaspet"]
+		CoherentCrystalOres:Add["Hemorphite"]
+		CoherentCrystalOres:Add["Hedbergite"]
+		CoherentCrystalOres:Add["Ytirium"]
+		CoherentCrystalOres:Add["Griemeer"]
+		CoherentCrystalOres:Add["Nocxite"]
+
+		; Variegated Asteroid Mining Crystal ores
+		VariegatedCrystalOres:Clear
+		VariegatedCrystalOres:Add["Gneiss"]
+		VariegatedCrystalOres:Add["Dark Ochre"]
+		VariegatedCrystalOres:Add["Crokite"]
+		VariegatedCrystalOres:Add["Kylixium"]
+		VariegatedCrystalOres:Add["Monazite"]
+		VariegatedCrystalOres:Add["Loparite"]
+		VariegatedCrystalOres:Add["Ytterbite"]
+
+		; Complex Asteroid Mining Crystal ores
+		ComplexCrystalOres:Clear
+		ComplexCrystalOres:Add["Bistot"]
+		ComplexCrystalOres:Add["Arkonor"]
+		ComplexCrystalOres:Add["Spodumain"]
+		ComplexCrystalOres:Add["Eifyrium"]
+		ComplexCrystalOres:Add["Ducinium"]
+		ComplexCrystalOres:Add["Hezorime"]
+		ComplexCrystalOres:Add["Ueganite"]
+
+		; Specialty Asteroid Mining Crystal ores
+		MercoxitCrystalOres:Clear
+		MercoxitCrystalOres:Add["Mercoxit"]
+
+		AbyssalCrystalOres:Clear
+		AbyssalCrystalOres:Add["Bezdnacine"]
+		AbyssalCrystalOres:Add["Rakovene"]
+		AbyssalCrystalOres:Add["Talassonite"]
 	}
 
 	method Shutdown()
@@ -1523,16 +1563,119 @@ objectdef obj_Ship
 		{
 			BaseType:Set[${BaseType.Replace[" II-Grade", ""]}]
 		}
+		elseif ${BaseType.Find["II-Grade"](exists)}
+		{
+			BaseType:Set[${BaseType.Replace["II-Grade", ""]}]
+		}
 		elseif ${BaseType.Find[" III-Grade"](exists)}
 		{
 			BaseType:Set[${BaseType.Replace[" III-Grade", ""]}]
+		}
+		elseif ${BaseType.Find["III-Grade"](exists)}
+		{
+			BaseType:Set[${BaseType.Replace["III-Grade", ""]}]
 		}
 		elseif ${BaseType.Find[" IV-Grade"](exists)}
 		{
 			BaseType:Set[${BaseType.Replace[" IV-Grade", ""]}]
 		}
+		elseif ${BaseType.Find["IV-Grade"](exists)}
+		{
+			BaseType:Set[${BaseType.Replace["IV-Grade", ""]}]
+		}
 
 		return ${BaseType}
+	}
+
+	member:string FindOreInSet(string OreType, string SetName)
+	{
+		variable iterator OreIterator
+
+		${SetName}:GetIterator[OreIterator]
+		if ${OreIterator:First(exists)}
+		do
+		{
+			if ${OreType.Find[${OreIterator.Value}](exists)}
+			{
+				return ${OreIterator.Value}
+			}
+		}
+		while ${OreIterator:Next(exists)}
+
+		return "UNKNOWN"
+	}
+
+	member:string GetOreCrystalFamily(string OreType)
+	{
+		if !${This.FindOreInSet[${OreType}, SimpleCrystalOres].Equal["UNKNOWN"]}
+		{
+			return "Simple"
+		}
+		elseif !${This.FindOreInSet[${OreType}, CoherentCrystalOres].Equal["UNKNOWN"]}
+		{
+			return "Coherent"
+		}
+		elseif !${This.FindOreInSet[${OreType}, VariegatedCrystalOres].Equal["UNKNOWN"]}
+		{
+			return "Variegated"
+		}
+		elseif !${This.FindOreInSet[${OreType}, ComplexCrystalOres].Equal["UNKNOWN"]}
+		{
+			return "Complex"
+		}
+		elseif !${This.FindOreInSet[${OreType}, MercoxitCrystalOres].Equal["UNKNOWN"]}
+		{
+			return "Mercoxit"
+		}
+		elseif !${This.FindOreInSet[${OreType}, AbyssalCrystalOres].Equal["UNKNOWN"]}
+		{
+			return "Abyssal"
+		}
+
+		return "UNKNOWN"
+	}
+
+	member:string GetBaseCrystalOreType(string OreType)
+	{
+		variable string BaseOre
+
+		BaseOre:Set[${This.FindOreInSet[${OreType}, SimpleCrystalOres]}]
+		if !${BaseOre.Equal["UNKNOWN"]}
+		{
+			return ${BaseOre}
+		}
+
+		BaseOre:Set[${This.FindOreInSet[${OreType}, CoherentCrystalOres]}]
+		if !${BaseOre.Equal["UNKNOWN"]}
+		{
+			return ${BaseOre}
+		}
+
+		BaseOre:Set[${This.FindOreInSet[${OreType}, VariegatedCrystalOres]}]
+		if !${BaseOre.Equal["UNKNOWN"]}
+		{
+			return ${BaseOre}
+		}
+
+		BaseOre:Set[${This.FindOreInSet[${OreType}, ComplexCrystalOres]}]
+		if !${BaseOre.Equal["UNKNOWN"]}
+		{
+			return ${BaseOre}
+		}
+
+		BaseOre:Set[${This.FindOreInSet[${OreType}, MercoxitCrystalOres]}]
+		if !${BaseOre.Equal["UNKNOWN"]}
+		{
+			return ${BaseOre}
+		}
+
+		BaseOre:Set[${This.FindOreInSet[${OreType}, AbyssalCrystalOres]}]
+		if !${BaseOre.Equal["UNKNOWN"]}
+		{
+			return ${BaseOre}
+		}
+
+		return ${OreType}
 	}
 
 	; Determine crystal family from crystal name
@@ -1548,6 +1691,22 @@ objectdef obj_Ship
 		{
 			return "Coherent"
 		}
+		elseif ${CrystalName.Find["Variegated Asteroid Mining Crystal"](exists)}
+		{
+			return "Variegated"
+		}
+		elseif ${CrystalName.Find["Complex Asteroid Mining Crystal"](exists)}
+		{
+			return "Complex"
+		}
+		elseif ${CrystalName.Find["Mercoxit Asteroid Mining Crystal"](exists)} || ${CrystalName.Find["Mercoxit Mining Crystal"](exists)}
+		{
+			return "Mercoxit"
+		}
+		elseif ${CrystalName.Find["Abyssal Asteroid Mining Crystal"](exists)}
+		{
+			return "Abyssal"
+		}
 
 		; Unknown crystal family
 		return "UNKNOWN"
@@ -1558,7 +1717,7 @@ objectdef obj_Ship
 		; We might need to change loaded crystal
 		variable string LoadedAmmo
 
-		LoadedAmmo:Set[${This.LoadedMiningLaserCrystal[${SlotName}]}]
+		LoadedAmmo:Set[${This.LoadedMiningLaserCrystal[${SlotName}, TRUE]}]
 
 		; Extract base ore type (remove grade suffix)
 		variable string OreBaseType
@@ -1566,14 +1725,14 @@ objectdef obj_Ship
 
 		; Check if we need to change crystals
 		variable bool NeedToChange = TRUE
-		variable string LoadedFamily = ${This.GetCrystalFamily[${LoadedAmmo}]}
+		variable string OreFamily
+		OreFamily:Set[${This.GetOreCrystalFamily[${OreBaseType}]}]
+
+		variable string LoadedFamily
+		LoadedFamily:Set[${This.GetCrystalFamily[${LoadedAmmo}]}]
 
 		; If loaded crystal is from correct family, no change needed
-		if ${LoadedFamily.Equal["Simple"]} && ${SimpleCrystalOres.Contains[${OreBaseType}]}
-		{
-			NeedToChange:Set[FALSE]
-		}
-		elseif ${LoadedFamily.Equal["Coherent"]} && ${CoherentCrystalOres.Contains[${OreBaseType}]}
+		if ${LoadedFamily.Equal[${OreFamily}]} && !${OreFamily.Equal["UNKNOWN"]}
 		{
 			NeedToChange:Set[FALSE]
 		}
@@ -1598,19 +1757,7 @@ objectdef obj_Ship
 				variable string CrystalFamily
 				CrystalFamily:Set[${This.GetCrystalFamily[${CrystalIterator.Value.Name}]}]
 
-				; Check if crystal family matches ore type
-				variable bool CrystalMatches = FALSE
-
-				if ${CrystalFamily.Equal["Simple"]} && ${SimpleCrystalOres.Contains[${OreBaseType}]}
-				{
-					CrystalMatches:Set[TRUE]
-				}
-				elseif ${CrystalFamily.Equal["Coherent"]} && ${CoherentCrystalOres.Contains[${OreBaseType}]}
-				{
-					CrystalMatches:Set[TRUE]
-				}
-
-				if ${CrystalMatches}
+				if ${CrystalFamily.Equal[${OreFamily}]} && !${OreFamily.Equal["UNKNOWN"]}
 				{
 					Logger:Log["Switching Crystal in ${SlotName} from ${LoadedAmmo} to ${CrystalIterator.Value.Name}"]
 					MyShip.Module[${SlotName}]:ChangeAmmo[${CrystalIterator.Value.ID},1]
