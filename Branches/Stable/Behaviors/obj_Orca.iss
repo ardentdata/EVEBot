@@ -908,7 +908,7 @@ objectdef obj_Orca
 				call Ship.StackOreHold
 			}
 			This.NextCompressedOreTransferCheck:Set[${Time.Timestamp}]
-			This.NextCompressedOreTransferCheck.Second:Inc[1]
+			This.NextCompressedOreTransferCheck.Second:Inc[60]
 			This.NextCompressedOreTransferCheck:Update
 		}
 
