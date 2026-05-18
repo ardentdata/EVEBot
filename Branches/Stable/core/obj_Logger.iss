@@ -158,7 +158,7 @@ objectdef obj_Logger
 
 		This:Log["Starting ${AppVersion}"]
 
-		redirect "${This.StatsLogFile}" echo "--------------------------------------------------------------------------------------"
+		redirect -append "${This.StatsLogFile}" echo "--------------------------------------------------------------------------------------"
 		redirect -append "${This.StatsLogFile}" echo "** ${AppVersion} starting on ${Time.Date} at ${Time.Time24}"
 	}
 }
