@@ -1719,7 +1719,7 @@ objectdef obj_Cargo
 
 	function TransferOreToShipCorpHangar(int64 dest)
 	{
-		Logger:Log["Transferring Ore to Corp Hangar"]
+		variable bool transferredSomething = FALSE
 
 		call Inventory.ShipCargo.Activate
 		if ${Inventory.ShipCargo.IsCurrent}
@@ -1727,9 +1727,17 @@ objectdef obj_Cargo
 			call Inventory.Stack
 			; Wait after Stack before GetItems to prevent timing issues (200ms)
 			wait 2
+			This.CargoToTransfer:Clear
 			Inventory:GetItems[This.CargoToTransfer, "CategoryID == CATEGORYID_ORE"]
-			call This.TransferListToShipCorporateHangar ${dest}
+			if ${This.CargoToTransfer.Used} > 0
+			{
+				Logger:Log["Transferring Ore from Cargo Hold to Corp Hangar"]
+				call This.TransferListToShipCorporateHangar ${dest}
+				transferredSomething:Set[TRUE]
+			}
 		}
+
+		This.CargoToTransfer:Clear
 
 		call Inventory.ShipGeneralMiningHold.Activate
 		if ${Inventory.ShipGeneralMiningHold.IsCurrent}
@@ -1737,11 +1745,18 @@ objectdef obj_Cargo
 			call Inventory.Stack
 			; Wait after Stack before GetItems to prevent timing issues (200ms)
 			wait 2
+			This.CargoToTransfer:Clear
 			Inventory:GetItems[This.CargoToTransfer, "CategoryID == CATEGORYID_ORE"]
-			call This.TransferListToShipCorporateHangar ${dest}
+			if ${This.CargoToTransfer.Used} > 0
+			{
+				Logger:Log["Transferring Ore from Mining Hold to Corp Hangar"]
+				call This.TransferListToShipCorporateHangar ${dest}
+				transferredSomething:Set[TRUE]
+			}
 		}
 
 		This.CargoToTransfer:Clear[]
+		return ${transferredSomething}
 	}
 
 	; Transfer only compressed ore to a ship's fleet hangar (for Orca delivery in GroupMode)

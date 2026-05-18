@@ -1113,8 +1113,11 @@ objectdef obj_Miner
 
 			if (${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)} && ${Ship.OreHoldHalfFull}) || ${Ship.CargoTenthFull}
 			{
-					Logger:Log["Emptying ore to ${Entity[${Orca.Escape}].Name}'s Corporate Hangars"]
 					call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}].ID}
+					if ${Return}
+					{
+						Logger:Log["Emptied ore to ${Entity[${Orca.Escape}].Name}'s Corporate Hangars"]
+					}
 					call Cargo.ReplenishCrystals ${Entity[${Orca.Escape}].ID}
 			}
 
