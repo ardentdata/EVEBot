@@ -149,7 +149,7 @@ objectdef obj_Logger
 
 	method InitializeLogs()
 	{
-		redirect -append "${This.LogFile}" echo "--------------------------------------------------------------------------------------"
+		redirect "${This.LogFile}" echo "--------------------------------------------------------------------------------------"
 		redirect -append "${This.LogFile}" echo "** ${AppVersion} starting on ${Time.Date} at ${Time.Time24}"
 		if EVEBOT_DEBUG == 1
 		{
@@ -158,7 +158,7 @@ objectdef obj_Logger
 
 		This:Log["Starting ${AppVersion}"]
 
-		redirect -append "${This.StatsLogFile}" echo "--------------------------------------------------------------------------------------"
+		redirect "${This.StatsLogFile}" echo "--------------------------------------------------------------------------------------"
 		redirect -append "${This.StatsLogFile}" echo "** ${AppVersion} starting on ${Time.Date} at ${Time.Time24}"
 	}
 }
