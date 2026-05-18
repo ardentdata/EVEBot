@@ -465,32 +465,8 @@ objectdef obj_Cargo
 			return FALSE
 		}
 
-		; Quick check for compressed ore without activating the window first
 		variable index:item AllOreItems
 		variable iterator OreIterator
-		variable bool HasCompressedOre = FALSE
-
-		Inventory.ShipFleetHangar:GetItems[AllOreItems, "CategoryID == CATEGORYID_ORE"]
-		AllOreItems:GetIterator[OreIterator]
-
-		if ${OreIterator:First(exists)}
-		{
-			do
-			{
-				if ${OreIterator.Value.Name.Find["Compressed"]} > 0
-				{
-					HasCompressedOre:Set[TRUE]
-					break
-				}
-			}
-			while ${OreIterator:Next(exists)}
-		}
-
-		; Only activate and transfer if there's compressed ore to move
-		if !${HasCompressedOre}
-		{
-			return FALSE
-		}
 
 		call Inventory.ShipFleetHangar.Activate
 		if !${Inventory.ShipFleetHangar.IsCurrent}
@@ -503,7 +479,6 @@ objectdef obj_Cargo
 		wait 2
 
 		This.CargoToTransfer:Clear
-		AllOreItems:Clear
 		Inventory.ShipFleetHangar:GetItems[AllOreItems, "CategoryID == CATEGORYID_ORE"]
 		AllOreItems:GetIterator[OreIterator]
 

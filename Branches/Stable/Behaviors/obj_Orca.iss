@@ -12,6 +12,7 @@ objectdef obj_Orca
 
 	variable time NextHaulerNotify
 	variable time NextFuelBayCheck
+	variable time NextCompressedOreTransferCheck
 
 	;	State information (What we're doing)
 	variable string CurrentState = "IDLE"
@@ -899,10 +900,16 @@ objectdef obj_Orca
 
 		;	Move compressed ore from fleet hangar to mining hold (ore hold) which has much larger capacity
 		;	This keeps the fleet hangar clear for miners to deposit more compressed ore
-		if !${Ship.OreHoldFull}
+		if !${Ship.OreHoldFull} && ${Time.Timestamp} >= ${This.NextCompressedOreTransferCheck.Timestamp}
 		{
 			call Cargo.TransferCompressedOreFromShipFleetHangarToOreHold
-			call Ship.StackOreHold
+			if ${Return}
+			{
+				call Ship.StackOreHold
+			}
+			This.NextCompressedOreTransferCheck:Set[${Time.Timestamp}]
+			This.NextCompressedOreTransferCheck.Second:Inc[1]
+			This.NextCompressedOreTransferCheck:Update
 		}
 
 		if ${Config.Miner.OrcaTractorLoot}
