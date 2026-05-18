@@ -107,6 +107,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 		{
 			if ${Me.InSpace}
 			{
+				This:CheckGridHostiles
 				This:CheckAttack
 			}
 
@@ -319,6 +320,44 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 			while ${hostiletarget:Next(exists)}
 		}
 		return 0
+	}
+
+	member:bool IsIgnoredGridHostile(int GroupID)
+	{
+		switch ${GroupID}
+		{
+			case GROUP_CONCORDDRONE
+			case GROUP_CONVOYDRONE
+			case GROUP_CONVOY
+			case GROUP_LARGECOLLIDABLEOBJECT
+			case GROUP_LARGECOLLIDABLESHIP
+			case GROUP_LARGECOLLIDABLESTRUCTURE
+			case GROUPID_WRECK
+				return TRUE
+		}
+
+		return FALSE
+	}
+
+	method CheckGridHostiles()
+	{
+		variable iterator GridHostile
+		variable index:entity GridHostiles
+
+		EVE:QueryEntities[GridHostiles, "CategoryID = CATEGORYID_ENTITY && Distance < ${Ship.OptimalTargetingRange} && Distance < ${Me.DroneControlDistance} && (GroupID < GROUP_NPC_MINING_FRIGATE || GroupID > GROUP_NPC_MINING_HAULER)"]
+		GridHostiles:GetIterator[GridHostile]
+		if ${GridHostile:First(exists)}
+		{
+			do
+			{
+				if !${This.IsIgnoredGridHostile[${GridHostile.Value.GroupID}]} && !${This.isKnownHostile[${GridHostile.Value.ID}]}
+				{
+					Logger:Log["${LogPrefix}: Proactively alerting team to kill ${GridHostile.Value.Name}(${GridHostile.Value.ID})"]
+					relay all "Event[EVEBot_AttackerReport]:Execute[${MyShip.ID}, ${GridHostile.Value.ID}]"
+				}
+			}
+			while ${GridHostile:Next(exists)}
+		}
 	}
 
 	;This method is used to trigger an event.  It tells our team-mates we are under attack by an NPC and what it is.
