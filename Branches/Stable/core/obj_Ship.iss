@@ -16,6 +16,7 @@ objectdef obj_Ship
 	variable float BaselineUsedCargo
 	variable bool CargoIsOpen
 	variable int RetryUpdateModuleList
+	variable int LastFuelBayMakeActiveAt = 0
 	variable index:module ModuleList
 	variable index:module ModuleList_ShieldTransporters
 	variable index:module ModuleList_MiningLaser
@@ -378,8 +379,9 @@ objectdef obj_Ship
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}](exists)}
 		{
 			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}]:MakeActive
+			LastFuelBayMakeActiveAt:Set[${Script.RunningTime}]
 			wait 5
-			Logger:Log["DEBUG: Fuel bay window activated", LOG_DEBUG]
+			Logger:Log["DEBUG: Fuel bay window activated: Window=${WindowName}, LastFuelBayMakeActiveAt=${This.LastFuelBayMakeActiveAt}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 			Logger:Log["DEBUG: Fuel bay LocationFlag: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlag}", LOG_DEBUG]
 			Logger:Log["DEBUG: Fuel bay LocationFlagID: ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].LocationFlagID}", LOG_DEBUG]
 		}
@@ -648,6 +650,7 @@ objectdef obj_Ship
 			return 0
 		}
 		variable string WindowName = ${This.FuelBayWindowName}
+		Logger:Log["DEBUG: FuelBayCapacity read: Window=${WindowName}, AgeSinceMakeActive=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].Capacity}
 	}
 
@@ -658,6 +661,7 @@ objectdef obj_Ship
 			return 0
 		}
 		variable string WindowName = ${This.FuelBayWindowName}
+		Logger:Log["DEBUG: FuelBayUsedCapacity read: Window=${WindowName}, AgeSinceMakeActive=${Math.Calc[${Script.RunningTime} - ${This.LastFuelBayMakeActiveAt}]}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].UsedCapacity}
 	}
 

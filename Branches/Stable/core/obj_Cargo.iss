@@ -357,6 +357,8 @@ objectdef obj_Cargo
 	{
 		variable iterator CargoIterator
 		variable int QuantityToMove
+		variable float OreHoldFreeSpace
+		variable int OreHoldActiveAge
 
 		if ${ListToMove.Used} == 0
 		{
@@ -366,6 +368,7 @@ objectdef obj_Cargo
 
 		if !${Ship.OreHoldCapacityReady}
 		{
+			Logger:Log["DEBUG: TransferListToOreHold blocked: OreHoldCapacityReady=FALSE, stacks=${ListToMove.Used}, LastMakeActiveAt=${Inventory.ShipGeneralMiningHold.LastMakeActiveAt}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 			return FALSE
 		}
 
@@ -374,7 +377,11 @@ objectdef obj_Cargo
 		{
 			do
 			{
-				QuantityToMove:Set[${This.CalcAmountToMove[${Ship.OreHoldFreeSpace}, ${CargoIterator.Value.Quantity}, ${CargoIterator.Value.Volume}]}]
+				OreHoldActiveAge:Set[${Math.Calc[${Script.RunningTime} - ${Inventory.ShipGeneralMiningHold.LastMakeActiveAt}]}]
+				Logger:Log["DEBUG: TransferListToOreHold free-space probe: stacks=${ListToMove.Used}, item=${CargoIterator.Value.Name}, qty=${CargoIterator.Value.Quantity}, LastMakeActiveAt=${Inventory.ShipGeneralMiningHold.LastMakeActiveAt}, AgeSinceMakeActive=${OreHoldActiveAge}, MiningHoldIsCurrent=${Inventory.ShipGeneralMiningHold.IsCurrent}", LOG_DEBUG]
+				OreHoldFreeSpace:Set[${Ship.OreHoldFreeSpace}]
+				Logger:Log["DEBUG: TransferListToOreHold free-space result: FreeSpace=${OreHoldFreeSpace}, item=${CargoIterator.Value.Name}, qty=${CargoIterator.Value.Quantity}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
+				QuantityToMove:Set[${This.CalcAmountToMove[${OreHoldFreeSpace}, ${CargoIterator.Value.Quantity}, ${CargoIterator.Value.Volume}]}]
 
 				if ${QuantityToMove} == 0
 				{
