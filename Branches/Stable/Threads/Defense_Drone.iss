@@ -30,6 +30,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 	; Limits how often we send commands
 	variable obj_PulseTimer DroneCommandTimer
 	variable obj_PulseTimer DroneLaunchDelay		/* Delay for initial launch of drones */
+	variable int MaxConcurrentHostileTargets = 3
 
 	;	This is a list of IDs for rats which are attacking a team member
 	variable index:obj_Hostile HostileTargets
@@ -166,6 +167,7 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 			{
 				This:ClearInvalidCurrentTarget
 				This:ChooseTarget
+				This:PrelockHostiles
 				if ${This.CurrentTarget.ID(exists)} && ${This.CurrentTarget.WreckID} == -1
 				{
 					if ${Ship.Drones.DronesInSpace[FALSE]} == 0 && !${This.DroneLaunchDelay.Restarted}
@@ -541,6 +543,67 @@ objectdef obj_Defense_Drone inherits obj_BaseClass
 				This.CurrentTarget:Set[${CurrentHostile.Value.HostileID}]
 				Logger:Log["${LogPrefix}: Targeting ${This.CurrentTarget.ID}:${This.CurrentTarget.Name} (${Ship.AvailableTargets} slots remaining)"]
 				return
+			}
+		}
+		while ${CurrentHostile:Next(exists)}
+	}
+
+	method PrelockHostiles()
+	{
+		variable int LockedOrLockingHostiles = 0
+		variable iterator CurrentHostile
+
+		HostileTargets:GetIterator[CurrentHostile]
+		if ${CurrentHostile:First(exists)}
+		do
+		{
+			if ${Entity[${CurrentHostile.Value.HostileID}](exists)} && \
+				${Entity[${CurrentHostile.Value.HostileID}].WreckID} == -1 && \
+				${Entity[${CurrentHostile.Value.HostileID}].GroupID} != GROUPID_WRECK && \
+				${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Ship.OptimalTargetingRange} && \
+				${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Me.DroneControlDistance} && \
+				(${Entity[${CurrentHostile.Value.HostileID}].IsLockedTarget} || ${Entity[${CurrentHostile.Value.HostileID}].BeingTargeted})
+			{
+				LockedOrLockingHostiles:Inc
+			}
+		}
+		while ${CurrentHostile:Next(exists)}
+
+		if ${LockedOrLockingHostiles} >= ${MaxConcurrentHostileTargets} || ${Ship.AvailableTargets} <= 0
+		{
+			return
+		}
+
+		HostileTargets:GetIterator[CurrentHostile]
+		if ${CurrentHostile:First(exists)}
+		do
+		{
+			if ${LockedOrLockingHostiles} >= ${MaxConcurrentHostileTargets} || ${Ship.AvailableTargets} <= 0
+			{
+				return
+			}
+
+			if !${Entity[${CurrentHostile.Value.HostileID}](exists)}
+			{
+				continue
+			}
+
+			if ${Entity[${CurrentHostile.Value.HostileID}].WreckID} != -1 || ${Entity[${CurrentHostile.Value.HostileID}].GroupID} == GROUPID_WRECK
+			{
+				continue
+			}
+
+			if ${Entity[${CurrentHostile.Value.HostileID}].IsLockedTarget} || ${Entity[${CurrentHostile.Value.HostileID}].BeingTargeted}
+			{
+				continue
+			}
+
+			if ${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Ship.OptimalTargetingRange} && \
+				${Entity[${CurrentHostile.Value.HostileID}].Distance} < ${Me.DroneControlDistance}
+			{
+				Entity[${CurrentHostile.Value.HostileID}]:LockTarget
+				LockedOrLockingHostiles:Inc
+				Logger:Log["${LogPrefix}: Prelocking hostile ${CurrentHostile.Value.HostileID}:${Entity[${CurrentHostile.Value.HostileID}].Name} (${Ship.AvailableTargets} slots remaining)"]
 			}
 		}
 		while ${CurrentHostile:Next(exists)}
