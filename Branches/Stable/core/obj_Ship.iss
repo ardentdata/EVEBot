@@ -359,6 +359,31 @@ objectdef obj_Ship
 		return FALSE
 	}
 
+	function StackFuelBay()
+	{
+		if !${This.FuelBayExists}
+		{
+			return FALSE
+		}
+
+		call This.ActivateFuelBay
+
+		variable string WindowName = ${This.FuelBayWindowName}
+		if ${WindowName.Equal[""]}
+		{
+			return FALSE
+		}
+
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}](exists)}
+		{
+			wait 10
+			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}]:StackAll
+			wait 5
+			return TRUE
+		}
+		return FALSE
+	}
+
 	function ActivateFuelBay()
 	{
 		Logger:Log["DEBUG: ActivateFuelBay called, FuelBayExists=${This.FuelBayExists}", LOG_DEBUG]
