@@ -106,8 +106,8 @@ objectdef obj_Miner
 		Event[EVEBot_Orca_InBelt]:DetachAtom[This:Event_OrcaIsInBelt]
 		Event[EVEBot_Master_InBelt]:DetachAtom[This:Event_MasterIsInBelt]
 		Event[EVEBot_HaulerMSG]:DetachAtom[This:HaulerMSG]
-		Event[EVEBot_Compression_On]:DetachAtom[This:Event_Compression]
-		Event[EVEBot_Compression_off]:DetachAtom[This:Event_NoCompression]
+		Event[EVEBOT_Compression_On]:DetachAtom[This:Event_Compression]
+		Event[EVEBOT_Compression_Off]:DetachAtom[This:Event_NoCompression]
 	}
 
 	method Pulse()

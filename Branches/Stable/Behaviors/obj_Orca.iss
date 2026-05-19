@@ -56,7 +56,7 @@ objectdef obj_Orca
 	{
 		Event[EVENT_ONFRAME]:DetachAtom[This:Pulse]
 		Event[EVEBot_HaulerMSG]:DetachAtom[This:HaulerMSG]
-		Event[EVEBot_Compression_Needed]:DetachAtom[This:Event_Compression_On]
+		Event[EVEBOT_Compression_Needed]:DetachAtom[This:Event_Compression_On]
 	}
 
 	method Pulse()
@@ -88,7 +88,7 @@ objectdef obj_Orca
 	;This is triggered by an event. If triggered we need to turn on compression
 	method Event_Compression_On(bool Compression_TurnedOn)
 	{
-		if (${Compression_TurnedOn} && !${EVEBOT_Compression_On} && ${Config.Common.CurrentBehavior.Equal[Orca]})
+		if (${Compression_TurnedOn} && !${EVEBOT_Compression_On} && !${ForceIndyCore} && !${CompressorActive} && ${Config.Common.CurrentBehavior.Equal[Orca]})
 		{
 			;Here we are going to set the bool for if we can compress or not
 			Logger:Log["Debug: Miners said they need to compress, lets get ready to turn on indy core"]
