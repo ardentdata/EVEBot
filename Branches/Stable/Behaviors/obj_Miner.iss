@@ -949,38 +949,6 @@ objectdef obj_Miner
 		variable iterator Target
 		variable int AsteroidsLocked=0
 
-		; lets call for compression
-		if (${Config.Miner.CompressOreMode} && ${Ship.OreHoldThreeQuartersFull} && !${ForceCompress} && !${EVEBOT_Compression_Needed})
-		{
-			Logger:Log["Debug: Lets tell the orca we need to compress"]
-			relay all -event EVEBOT_Compression_Needed TRUE
-		}
-		; lets compress
-		if (${ForceCompress} && ${Config.Miner.CompressOreMode})
-		{
-			call Compress.CompressRawOreIfAvailable
-			if ${Return}
-			{
-				NeedsCompressedOreStack:Set[TRUE]
-			}
-
-			call This.TransferCompressedOreToOrcaIfAvailable
-		}
-		; compression window ended; do one final compressed ore cleanup pass
-		if (${StopCompressing} && ${Config.Miner.CompressOreMode})
-		{
-			call This.TransferCompressedOreToOrcaIfAvailableForce TRUE
-			relay all -event EVEBOT_Compression_Off FALSE
-			StopCompressing:Set[FALSE]
-		}
-
-		; lets try to compress since solo compression is active
-		if (${Config.Miner.SoloCompressOreMode} && ${Ship.OreHoldHalfFull})
-		{
-			Logger:Log["Debug: Try To Compress"]
-			call Compress.CheckForCompression
-		}
-
 		;	If we're in a station there's not going to be any mining going on.  This should clear itself up if it ever happens.
 		if ${Me.InStation} != FALSE
 		{
@@ -1131,26 +1099,6 @@ objectdef obj_Miner
 				This:StartApproaching[${Entity[${Orca.Escape}].ID}, LOOT_RANGE]
 				This.ApproachingOrca:Set[TRUE]
 				return
-			}
-
-			; This performs Orca deliveries if we've got at least a tenth of our cargo hold full
-			if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
-			{
-				call Inventory.ShipGeneralMiningHold.Activate
-			}
-			else
-			{
-				call Inventory.ShipCargo.Activate
-			}
-
-			if (${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)} && ${Ship.OreHoldHalfFull}) || ${Ship.CargoTenthFull}
-			{
-					call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}].ID}
-					if ${Return}
-					{
-						Logger:Log["Emptied ore to ${Entity[${Orca.Escape}].Name}'s Corporate Hangars"]
-					}
-					call Cargo.ReplenishCrystals ${Entity[${Orca.Escape}].ID}
 			}
 
 		}
@@ -1323,7 +1271,14 @@ objectdef obj_Miner
 			; Only wait for targeting to complete if we have no locked asteroids available
 			if ${Me.TargetCount} == 0
 			{
-				wait 200 ${Me.TargetingCount} == 0
+				if ${ForceCompress} || ${StopCompressing} || ${EVEBOT_Compression_Needed}
+				{
+					wait 10 ${Me.TargetingCount} == 0
+				}
+				else
+				{
+					wait 200 ${Me.TargetingCount} == 0
+				}
 			}
 			LockedTargets:Clear
 			Me:GetTargets[LockedTargets]
@@ -1435,10 +1390,6 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 					call Asteroids.TargetNext
 				}
 				This.ConcentrateFire:Set[!${Return}]
-				if ${Return}
-				{
-					return
-				}
 			}
 
 			;	We don't need to lock another asteroid.  Let's find out if we need to signal a concentrate fire based on limitations of our ship.
@@ -1449,6 +1400,63 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 				{
 					This.ConcentrateFire:Set[TRUE]
 				}
+			}
+		}
+
+		; Compression and Orca inventory work can touch several inventory windows, so do it only after
+		; mining lasers and target acquisition have had the first chance to run.
+		; lets call for compression
+		if (${Config.Miner.CompressOreMode} && ${Ship.OreHoldThreeQuartersFull} && !${ForceCompress} && !${EVEBOT_Compression_Needed})
+		{
+			Logger:Log["Debug: Lets tell the orca we need to compress"]
+			relay all -event EVEBOT_Compression_Needed TRUE
+		}
+		; lets compress
+		if (${ForceCompress} && ${Config.Miner.CompressOreMode})
+		{
+			call Compress.CompressRawOreIfAvailable
+			if ${Return}
+			{
+				NeedsCompressedOreStack:Set[TRUE]
+			}
+
+			call This.TransferCompressedOreToOrcaIfAvailable
+		}
+		; compression window ended; do one final compressed ore cleanup pass
+		if (${StopCompressing} && ${Config.Miner.CompressOreMode})
+		{
+			call This.TransferCompressedOreToOrcaIfAvailableForce TRUE
+			relay all -event EVEBOT_Compression_Off FALSE
+			StopCompressing:Set[FALSE]
+		}
+
+		; lets try to compress since solo compression is active
+		if (${Config.Miner.SoloCompressOreMode} && ${Ship.OreHoldHalfFull})
+		{
+			Logger:Log["Debug: Try To Compress"]
+			call Compress.CheckForCompression
+		}
+
+		; This performs Orca deliveries after laser activation if we've got at least a tenth of our cargo hold full
+		if ${Config.Miner.DeliveryLocationTypeName.Equal[Orca]} && ${Entity[${Orca.Escape}](exists)} && ${Entity[${Orca.Escape}].Distance} <= LOOT_RANGE
+		{
+			if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
+			{
+				call Inventory.ShipGeneralMiningHold.Activate
+			}
+			else
+			{
+				call Inventory.ShipCargo.Activate
+			}
+
+			if (${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)} && ${Ship.OreHoldHalfFull}) || ${Ship.CargoTenthFull}
+			{
+					call Cargo.TransferOreToShipCorpHangar ${Entity[${Orca.Escape}].ID}
+					if ${Return}
+					{
+						Logger:Log["Emptied ore to ${Entity[${Orca.Escape}].Name}'s Corporate Hangars"]
+					}
+					call Cargo.ReplenishCrystals ${Entity[${Orca.Escape}].ID}
 			}
 		}
 
