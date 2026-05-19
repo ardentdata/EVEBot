@@ -902,14 +902,19 @@ objectdef obj_Orca
 		;	This keeps the fleet hangar clear for miners to deposit more compressed ore
 		if !${Ship.OreHoldFull} && ${Time.Timestamp} >= ${This.NextCompressedOreTransferCheck.Timestamp}
 		{
+			variable int CompressedOreTransferResult
 			call Cargo.TransferCompressedOreFromShipFleetHangarToOreHold
-			if ${Return}
+			CompressedOreTransferResult:Set[${Return}]
+			if ${CompressedOreTransferResult} > 0
 			{
 				call Ship.StackOreHold
 			}
-			This.NextCompressedOreTransferCheck:Set[${Time.Timestamp}]
-			This.NextCompressedOreTransferCheck.Second:Inc[60]
-			This.NextCompressedOreTransferCheck:Update
+			if ${CompressedOreTransferResult} >= 0
+			{
+				This.NextCompressedOreTransferCheck:Set[${Time.Timestamp}]
+				This.NextCompressedOreTransferCheck.Second:Inc[60]
+				This.NextCompressedOreTransferCheck:Update
+			}
 		}
 
 		if ${Config.Miner.OrcaTractorLoot}
@@ -920,34 +925,48 @@ objectdef obj_Orca
 		; Check fuel bay level every 60 seconds
 		if ${Time.Timestamp} >= ${This.NextFuelBayCheck.Timestamp}
 		{
+			variable bool FuelBayCheckComplete = FALSE
+
 			; Activate fuel bay window to get valid capacity values
 			call Ship.ActivateFuelBay
-
-			if ${Ship.FuelBayBelowHalf}
+			if ${Return} && ${Ship.FuelBayCapacityReady}
 			{
-				Logger:Log["Fuel bay below 50%, checking for Heavy Water in cargo...", LOG_MINOR]
-				call Cargo.TransferHeavyWaterFromCargoToFuelBay
-
-				if !${Return}
+				FuelBayCheckComplete:Set[TRUE]
+				if ${Ship.FuelBayBelowHalf}
 				{
-					; No heavy water found in cargo - check if fuel bay is completely empty
-					if ${Ship.FuelBayEmpty}
+					Logger:Log["Fuel bay below 50%, checking for Heavy Water in cargo...", LOG_MINOR]
+					call Cargo.TransferHeavyWaterFromCargoToFuelBay
+
+					if !${Return}
 					{
-						; Completely out of fuel with no way to refuel - critical safety issue
-						Logger:Log["CRITICAL: Fuel bay empty and no Heavy Water available in cargo!", LOG_CRITICAL]
-						Logger:Log["Returning to safe location for refuel", LOG_CRITICAL]
-						EVEBot.ReturnToStation:Set[TRUE]
-					}
-					else
-					{
-						Logger:Log["DEBUG: No heavy water in cargo but fuel bay not empty yet (has ${Ship.FuelBayUsedCapacity}/${Ship.FuelBayCapacity})", LOG_DEBUG]
+						FuelBayCheckComplete:Set[FALSE]
+						call Ship.ActivateFuelBay
+						if ${Return} && ${Ship.FuelBayCapacityReady}
+						{
+							FuelBayCheckComplete:Set[TRUE]
+							; No heavy water found in cargo - check if fuel bay is completely empty
+							if ${Ship.FuelBayEmpty}
+							{
+								; Completely out of fuel with no way to refuel - critical safety issue
+								Logger:Log["CRITICAL: Fuel bay empty and no Heavy Water available in cargo!", LOG_CRITICAL]
+								Logger:Log["Returning to safe location for refuel", LOG_CRITICAL]
+								EVEBot.ReturnToStation:Set[TRUE]
+							}
+							else
+							{
+								Logger:Log["DEBUG: No heavy water in cargo but fuel bay not empty yet (has ${Ship.FuelBayUsedCapacity}/${Ship.FuelBayCapacity})", LOG_DEBUG]
+							}
+						}
 					}
 				}
-			}
 
-			This.NextFuelBayCheck:Set[${Time.Timestamp}]
-			This.NextFuelBayCheck.Second:Inc[60]
-			This.NextFuelBayCheck:Update
+				if ${FuelBayCheckComplete}
+				{
+					This.NextFuelBayCheck:Set[${Time.Timestamp}]
+					This.NextFuelBayCheck.Second:Inc[60]
+					This.NextFuelBayCheck:Update
+				}
+			}
 		}
 
 		;	This checks to make sure there aren't any potential jet can flippers around before we dump a jetcan

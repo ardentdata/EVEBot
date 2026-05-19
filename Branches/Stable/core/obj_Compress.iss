@@ -10,7 +10,7 @@ BUGS:
 objectdef obj_Compress inherits obj_BaseClass
 {
 	variable int NextRawOreCheckAt = 0
-	variable int RawOreCheckIntervalMS = 5000
+	variable int RawOreCheckIntervalMS = 3000
 
 	method Initialize()
 	{
@@ -20,6 +20,19 @@ objectdef obj_Compress inherits obj_BaseClass
 	}
 
 	function CheckForCompression()
+	{
+		call This.CompressRawOreIfAvailable
+		if !${Return}
+		{
+			return FALSE
+		}
+
+		Logger:Log["Debug: Stacking ore in mining hold after compression"]
+		call Ship.StackOreHold
+		return TRUE
+	}
+
+	function CompressRawOreIfAvailable()
 	{
 		if ${Script.RunningTime} < ${This.NextRawOreCheckAt}
 		{
@@ -38,8 +51,6 @@ objectdef obj_Compress inherits obj_BaseClass
 		Logger:Log["Debug: Compressing ore hold via F12 hotkey"]
 		press F12
 		wait 30
-		Logger:Log["Debug: Stacking ore in mining hold after compression"]
-		call Ship.StackOreHold
 		return TRUE
 	}
 

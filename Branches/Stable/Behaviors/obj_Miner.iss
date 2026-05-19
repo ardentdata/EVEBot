@@ -28,6 +28,7 @@ objectdef obj_Miner
 	variable bool StopCompressing = FALSE
 	; Flag to signal compression request from atomic event handler (cannot call wait from atoms)
 	variable bool CompressionRequested = FALSE
+	variable bool NeedsCompressedOreStack = FALSE
 	variable int NextCompressedOreTransferToOrcaAt = 0
 	variable int CompressedOreTransferToOrcaIntervalMS = 30000
 
@@ -901,11 +902,12 @@ objectdef obj_Miner
 							{
 								if ${ForceCompress}
 								{
-									call Compress.CheckForCompression
+									call Compress.CompressRawOreIfAvailable
 									if ${Return}
 									{
-										call This.TransferCompressedOreToOrcaIfAvailable
+										NeedsCompressedOreStack:Set[TRUE]
 									}
+									call This.TransferCompressedOreToOrcaIfAvailableForce TRUE
 									break
 								}
 
@@ -956,16 +958,18 @@ objectdef obj_Miner
 		; lets compress
 		if (${ForceCompress} && ${Config.Miner.CompressOreMode})
 		{
-			call Compress.CheckForCompression
+			call Compress.CompressRawOreIfAvailable
 			if ${Return}
 			{
-				call This.TransferCompressedOreToOrcaIfAvailable
+				NeedsCompressedOreStack:Set[TRUE]
 			}
+
+			call This.TransferCompressedOreToOrcaIfAvailable
 		}
-		; lets stack our ore
-		if (${StopCompressing} && ${Ship.OreHoldTenthFull} && ${Config.Miner.CompressOreMode})
+		; compression window ended; do one final compressed ore cleanup pass
+		if (${StopCompressing} && ${Config.Miner.CompressOreMode})
 		{
-			call Ship.StackOreHold
+			call This.TransferCompressedOreToOrcaIfAvailableForce TRUE
 			relay all -event EVEBOT_Compression_Off FALSE
 			StopCompressing:Set[FALSE]
 		}
@@ -1486,6 +1490,12 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 
 	function TransferCompressedOreToOrcaIfAvailable()
 	{
+		call This.TransferCompressedOreToOrcaIfAvailableForce FALSE
+		return ${Return}
+	}
+
+	function TransferCompressedOreToOrcaIfAvailableForce(bool ForceTransfer)
+	{
 		if !${Config.Miner.DeliveryLocationTypeName.Equal[Orca]}
 		{
 			return FALSE
@@ -1502,13 +1512,20 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 			return FALSE
 		}
 
-		if ${Script.RunningTime} < ${This.NextCompressedOreTransferToOrcaAt} && !${Ship.OreHoldThreeQuartersFull}
+		if !${ForceTransfer} && ${Script.RunningTime} < ${This.NextCompressedOreTransferToOrcaAt} && !${Ship.OreHoldThreeQuartersFull}
 		{
 			return FALSE
 		}
 
 		NextCompressedOreTransferToOrcaAt:Set[${Script.RunningTime}]
 		NextCompressedOreTransferToOrcaAt:Inc[${CompressedOreTransferToOrcaIntervalMS}]
+
+		if ${NeedsCompressedOreStack}
+		{
+			Logger:Log["Debug: Stacking ore in mining hold before compressed ore transfer"]
+			call Ship.StackOreHold
+			NeedsCompressedOreStack:Set[FALSE]
+		}
 
 		call Cargo.TransferCompressedOreToShipFleetHangar ${Entity[${Orca.Escape}].ID}
 		return ${Return}

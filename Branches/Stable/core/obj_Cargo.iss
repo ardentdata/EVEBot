@@ -187,7 +187,17 @@ objectdef obj_Cargo
 		else
 		{
 			call Inventory.OpenEntityFleetHangar ${from}
-			call Inventory.EntityFleetHangar.Activate ${Return}
+			if !${Return}
+			{
+				return FALSE
+			}
+
+			call Inventory.EntityFleetHangar.Activate ${from}
+			if !${Inventory.EntityFleetHangar.IsCurrent}
+			{
+				return FALSE
+			}
+
 			call Inventory.Stack
 			; Wait after Stack before GetItems to prevent timing issues (200ms)
 			wait 2
@@ -358,6 +368,8 @@ objectdef obj_Cargo
 		variable iterator CargoIterator
 		variable int QuantityToMove
 		variable float OreHoldFreeSpace
+		variable bool movedSomething = FALSE
+		variable int TransferReadyCheck
 
 		if ${ListToMove.Used} == 0
 		{
@@ -365,9 +377,20 @@ objectdef obj_Cargo
 			return FALSE
 		}
 
+		call Inventory.ShipGeneralMiningHold.Activate
+		if !${Inventory.ShipGeneralMiningHold.IsCurrent}
+		{
+			return FALSE
+		}
+
+		while !${Ship.OreHoldCapacityReady} && ${TransferReadyCheck} < 15
+		{
+			TransferReadyCheck:Inc
+			wait 2
+		}
+
 		if !${Ship.OreHoldCapacityReady}
 		{
-			Logger:Log["DEBUG: TransferListToOreHold blocked: OreHoldCapacityReady=FALSE, stacks=${ListToMove.Used}, LastMakeActiveAt=${Inventory.ShipGeneralMiningHold.LastMakeActiveAt}, RunningTime=${Script.RunningTime}", LOG_DEBUG]
 			return FALSE
 		}
 
@@ -390,12 +413,63 @@ objectdef obj_Cargo
 				}
 
 				CargoIterator.Value:MoveTo[${MyShip.ID}, OreHold, ${QuantityToMove}]
+				movedSomething:Set[TRUE]
 				wait 15
 			}
 			while ${CargoIterator:Next(exists)}
-			return TRUE
+			return ${movedSomething}
 		}
 		return FALSE
+	}
+
+	function TransferListToOreHoldUsingFreeSpace(weakref ListToMove, float OreHoldFreeSpace)
+	{
+		variable iterator CargoIterator
+		variable int QuantityToMove
+		variable float VolumeMoved
+		variable bool movedSomething = FALSE
+
+		if ${ListToMove.Used} == 0
+		{
+			Logger:Log["TransferListToOreHoldUsingFreeSpace: Nothing found to move", LOG_WARNING]
+			return FALSE
+		}
+
+		if ${OreHoldFreeSpace} <= 0
+		{
+			Logger:Log["TransferListToOreHoldUsingFreeSpace: Skipping - no cached ore hold space available", LOG_DEBUG]
+			return FALSE
+		}
+
+		ListToMove:GetIterator[CargoIterator]
+		if ${CargoIterator:First(exists)}
+		{
+			do
+			{
+				QuantityToMove:Set[${This.CalcAmountToMove[${OreHoldFreeSpace}, ${CargoIterator.Value.Quantity}, ${CargoIterator.Value.Volume}]}]
+
+				if ${QuantityToMove} <= 0
+				{
+					Logger:Log["TransferListToOreHoldUsingFreeSpace: Skipping - no space: ${CargoIterator.Value.Quantity} units (${Math.Calc[${CargoIterator.Value.Quantity} * ${CargoIterator.Value.Volume}].Precision[2]}m3) of ${CargoIterator.Value.Name} (TypeID = ${CargoIterator.Value.TypeID}, GroupID = ${CargoIterator.Value.GroupID})"]
+					continue
+				}
+
+				Logger:Log["TransferListToOreHoldUsingFreeSpace: Moving ${QuantityToMove} units (${Math.Calc[${QuantityToMove} * ${CargoIterator.Value.Volume}].Precision[2]}m3) of ${CargoIterator.Value.Name} (TypeID = ${CargoIterator.Value.TypeID}, GroupID = ${CargoIterator.Value.GroupID})"]
+				CargoIterator.Value:MoveTo[${MyShip.ID}, OreHold, ${QuantityToMove}]
+				VolumeMoved:Set[${Math.Calc[${QuantityToMove} * ${CargoIterator.Value.Volume}]}]
+				OreHoldFreeSpace:Dec[${VolumeMoved}]
+				movedSomething:Set[TRUE]
+				wait 15
+
+				if ${OreHoldFreeSpace} <= 0
+				{
+					break
+				}
+			}
+			while ${CargoIterator:Next(exists)}
+		}
+
+		return ${movedSomething}
 	}
 
 	function TransferOreFromEntityFleetHangarToCargoHold(int64 SourceID)
@@ -403,15 +477,23 @@ objectdef obj_Cargo
 		Logger:Log["Moving ore from Entity ${SourceID} to Ship Cargo Hold"]
 
 		call Inventory.OpenEntityFleetHangar ${SourceID}
-		call Inventory.EntityFleetHangar.Activate ${SourceID}
-		if ${Inventory.EntityFleetHangar.IsCurrent}
+		if !${Return}
 		{
-			call Inventory.Stack
-			; Wait after Stack before GetItems to prevent timing issues (200ms)
-			wait 2
-			Inventory:GetItems[This.CargoToTransfer, "CategoryID == CATEGORYID_ORE"]
-			call TransferListToCargoHold This.CargoToTransfer
+			return FALSE
 		}
+
+		call Inventory.EntityFleetHangar.Activate ${SourceID}
+		if !${Inventory.EntityFleetHangar.IsCurrent}
+		{
+			return FALSE
+		}
+
+		call Inventory.Stack
+		; Wait after Stack before GetItems to prevent timing issues (200ms)
+		wait 2
+		Inventory:GetItems[This.CargoToTransfer, "CategoryID == CATEGORYID_ORE"]
+		call TransferListToCargoHold This.CargoToTransfer
+		return ${Return}
 	}
 
 	function TransferOreFromEntityFleetHangarToOreHold(int64 SourceID)
@@ -419,21 +501,29 @@ objectdef obj_Cargo
 		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
 		{
 			Logger:Log["TransferOreFromEntityFleetHangarToOreHold - No Ore Hold Detected!", LOG_DEBUG]
-			return
+			return FALSE
 		}
 
 		Logger:Log["Moving ore from Entity ${SourceID} to Ship Ore Hold"]
 
 		call Inventory.OpenEntityFleetHangar ${SourceID}
-		call Inventory.EntityFleetHangar.Activate ${SourceID}
-		if ${Inventory.EntityFleetHangar.IsCurrent}
+		if !${Return}
 		{
-			call Inventory.Stack
-			; Wait after Stack before GetItems to prevent timing issues (200ms)
-			wait 2
-			Inventory:GetItems[This.CargoToTransfer, "CategoryID == CATEGORYID_ORE"]
-			call TransferListToOreHold This.CargoToTransfer
+			return FALSE
 		}
+
+		call Inventory.EntityFleetHangar.Activate ${SourceID}
+		if !${Inventory.EntityFleetHangar.IsCurrent}
+		{
+			return FALSE
+		}
+
+		call Inventory.Stack
+		; Wait after Stack before GetItems to prevent timing issues (200ms)
+		wait 2
+		Inventory:GetItems[This.CargoToTransfer, "CategoryID == CATEGORYID_ORE"]
+		call TransferListToOreHold This.CargoToTransfer
+		return ${Return}
 	}
 
 	; Transfer cargo from my ships fleet hangar to my ships ore hold
@@ -459,22 +549,41 @@ objectdef obj_Cargo
 	}
 
 	; Transfer compressed ore from my ships fleet hangar to my ships ore hold (for Orca)
-	; Returns TRUE if compressed ore was found and transferred, FALSE otherwise
+	; Returns 1 if moved, 0 if no move was needed, -1 if inventory was temporarily unavailable
 	function TransferCompressedOreFromShipFleetHangarToOreHold()
 	{
-		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
-		{
-			Logger:Log["TransferCompressedOreFromShipFleetHangarToOreHold - No Ore Hold Detected!", LOG_DEBUG]
-			return FALSE
-		}
-
 		variable index:item AllOreItems
 		variable iterator OreIterator
+		variable float OreHoldFreeSpace
+		variable int TransferReadyCheck
+
+		call Inventory.ShipGeneralMiningHold.Activate
+		if !${Inventory.ShipGeneralMiningHold.IsCurrent}
+		{
+			return -1
+		}
+
+		while !${Ship.OreHoldCapacityReady} && ${TransferReadyCheck} < 15
+		{
+			TransferReadyCheck:Inc
+			wait 2
+		}
+
+		if !${Ship.OreHoldCapacityReady}
+		{
+			return -1
+		}
+
+		OreHoldFreeSpace:Set[${Ship.OreHoldFreeSpace}]
+		if ${OreHoldFreeSpace} <= 0
+		{
+			return 0
+		}
 
 		call Inventory.ShipFleetHangar.Activate
 		if !${Inventory.ShipFleetHangar.IsCurrent}
 		{
-			return FALSE
+			return -1
 		}
 
 		call Inventory.Stack
@@ -501,11 +610,16 @@ objectdef obj_Cargo
 		if ${This.CargoToTransfer.Used} > 0
 		{
 			Logger:Log["Moving ${This.CargoToTransfer.Used} compressed ore item(s) from Ship Fleet Hangar to Ship Ore Hold"]
-			call TransferListToOreHold This.CargoToTransfer
-			return TRUE
+			call TransferListToOreHoldUsingFreeSpace This.CargoToTransfer ${OreHoldFreeSpace}
+			if ${Return}
+			{
+				return 1
+			}
+
+			return -1
 		}
 
-		return FALSE
+		return 0
 	}
 
 	function TransferCargoFromShipGeneralMiningHoldToStation()
@@ -788,6 +902,19 @@ objectdef obj_Cargo
 			return FALSE
 		}
 
+		call Ship.ActivateFuelBay
+		if !${Return} || !${Ship.FuelBayCapacityReady}
+		{
+			return FALSE
+		}
+
+		variable float FuelBayFree = ${Ship.FuelBayFreeSpace}
+		if ${FuelBayFree} <= 0
+		{
+			Logger:Log["DEBUG: Fuel bay has no free space available", LOG_DEBUG]
+			return FALSE
+		}
+
 		call Inventory.ShipCargo.Activate
 		if !${Inventory.ShipCargo.IsCurrent}
 		{
@@ -819,7 +946,6 @@ objectdef obj_Cargo
 		HeavyWaterItems:GetIterator[HWIterator]
 
 		variable int TotalMoved = 0
-		variable float FuelBayFree = ${Ship.FuelBayFreeSpace}
 		variable int StackQuantity
 		variable float VolumePerUnit = 0.4
 		variable float StackVolume
@@ -1151,6 +1277,11 @@ objectdef obj_Cargo
 	{
 		variable int QuantityToMove
 
+		if ${FreeSpace} <= 0.1 || ${Volume} <= 0
+		{
+			return 0
+		}
+
 		; Move only what will fit, minus 0.1 to account for CCP rounding errors.
 		;echo if (${Quantity} * ${Volume}) > (${FreeSpace}-0.1)
 		if (${Quantity} * ${Volume}) > (${FreeSpace}-0.1)
@@ -1229,7 +1360,7 @@ objectdef obj_Cargo
 		}
 
 		call Inventory.ShipCargo.Activate
-		if ${Inventory.ShipGeneralMiningHold.IsCurrent}
+		if ${Inventory.ShipCargo.IsCurrent}
 		{
 			call Inventory.Stack
 			; Wait after Stack before GetItems to prevent timing issues (200ms)
@@ -1239,7 +1370,7 @@ objectdef obj_Cargo
 		}
 
 		call Inventory.ShipGeneralMiningHold.Activate
-		if ${Inventory.ShipOreHold.IsCurrent}
+		if ${Inventory.ShipGeneralMiningHold.IsCurrent}
 		{
 			call Inventory.Stack
 			; Wait after Stack before GetItems to prevent timing issues (200ms)
@@ -1672,14 +1803,26 @@ objectdef obj_Cargo
 		variable bool movedSomething = FALSE
 		This.CargoToTransfer:GetIterator[CargoIterator]
 
+		if ${dest} <= 0
+		{
+			Logger:Log["DEBUG: obj_Cargo:TransferListToShipCorporateHangar: Invalid target fleet hangar entity ${dest}"]
+			return FALSE
+		}
+
 		if ${CargoIterator:First(exists)}
 		{
 			call Inventory.OpenEntityFleetHangar ${dest}
+			if !${Return}
+			{
+				Logger:Log["DEBUG: obj_Cargo:TransferListToShipCorporateHangar: Unable to open target entity ${dest}"]
+				return FALSE
+			}
+
 			call Inventory.EntityFleetHangar.Activate ${dest}
 			if !${Inventory.EntityFleetHangar.IsCurrent}
 			{
 				Logger:Log["DEBUG: obj_Cargo:TransferListToShipCorporateHangar: Unable to open target fleet hangar"]
-				return false
+				return FALSE
 			}
 
 			do
@@ -1706,6 +1849,8 @@ objectdef obj_Cargo
 		{
 			Logger:Log["DEBUG: obj_Cargo:TransferListToShipCorporateHangar: Nothing found to move"]
 		}
+
+		return ${movedSomething}
 	}
 
 	function TransferOreToShipCorpHangar(int64 dest)
@@ -1724,7 +1869,10 @@ objectdef obj_Cargo
 			{
 				Logger:Log["Transferring Ore from Cargo Hold to Corp Hangar"]
 				call This.TransferListToShipCorporateHangar ${dest}
-				transferredSomething:Set[TRUE]
+				if ${Return}
+				{
+					transferredSomething:Set[TRUE]
+				}
 			}
 		}
 
@@ -1742,7 +1890,10 @@ objectdef obj_Cargo
 			{
 				Logger:Log["Transferring Ore from Mining Hold to Corp Hangar"]
 				call This.TransferListToShipCorporateHangar ${dest}
-				transferredSomething:Set[TRUE]
+				if ${Return}
+				{
+					transferredSomething:Set[TRUE]
+				}
 			}
 		}
 
@@ -1790,7 +1941,10 @@ objectdef obj_Cargo
 			{
 				Logger:Log["Transferring ${This.CargoToTransfer.Used} compressed ore item(s) from cargo to Fleet Hangar"]
 				call This.TransferListToShipCorporateHangar ${dest} TRUE
-				transferredSomething:Set[TRUE]
+				if ${Return}
+				{
+					transferredSomething:Set[TRUE]
+				}
 			}
 		}
 
@@ -1829,7 +1983,10 @@ objectdef obj_Cargo
 			{
 				Logger:Log["Transferring ${This.CargoToTransfer.Used} compressed ore item(s) from mining hold to Fleet Hangar"]
 				call This.TransferListToShipCorporateHangar ${dest} TRUE
-				transferredSomething:Set[TRUE]
+				if ${Return}
+				{
+					transferredSomething:Set[TRUE]
+				}
 			}
 		}
 

@@ -29,9 +29,11 @@ objectdef obj_EVEWindow_Proxy
 	variable int64 InvID = -1
 	variable string InvLocation = ""
 	variable string EVEWindowParams = ""
+	variable int64 EffectiveInvID = -1
 	variable index:item Items
 	variable int LastMakeActiveAt = 0
 	variable int MakeActiveSettleMS = 2300
+	variable int CapacityReadSettleMS = 5000
 
 	method Initialize()
 	{
@@ -41,13 +43,37 @@ objectdef obj_EVEWindow_Proxy
 	method SetFallThroughParams()
 	{
 		EVEWindowParams:Set[""]
+		EffectiveInvID:Set[${This.InvID}]
+		variable bool SuppressNameOnly = FALSE
 
-		if ${This.InvID} != -1
+		if ${This.ObjectName.Equal[EntityFleetHangar]}
 		{
-			EVEWindowParams:Concat["${This.InvID}"]
+			SuppressNameOnly:Set[TRUE]
+		}
+		elseif (${This.ObjectName.Equal[ShipCargo]} || ${This.ObjectName.Equal[ShipFleetHangar]} || ${This.ObjectName.Equal[ShipGeneralMiningHold]} || ${This.ObjectName.Equal[ShipDroneBay]}) && (${This.InvName.Equal[ShipCargo]} || ${This.InvName.Equal[ShipFleetHangar]} || ${This.InvName.Equal[ShipGeneralMiningHold]} || ${This.InvName.Equal[ShipDroneBay]})
+		{
+			SuppressNameOnly:Set[TRUE]
+			EffectiveInvID:Set[-1]
+			if ${MyShip.ID} > 0
+			{
+				EffectiveInvID:Set[${MyShip.ID}]
+			}
+		}
+		elseif ${This.InvName.Equal[StationItems]} || ${This.InvName.Equal[StructureItemHangar]} || ${This.InvName.Equal[StationShips]} || ${This.InvName.Equal[StructureShipHangar]} || ${This.InvName.Equal[StationCorpHangars]} || ${This.InvName.Equal[StationCorpDeliveries]}
+		{
+			SuppressNameOnly:Set[TRUE]
+			EffectiveInvID:Set[-1]
+			if ${Me.StationID} > 0
+			{
+				EffectiveInvID:Set[${Me.StationID}]
+			}
+		}
+		if ${EffectiveInvID} > 0
+		{
+			EVEWindowParams:Concat["${EffectiveInvID}"]
 		}
 
-		if ${This.InvName.NotNULLOrEmpty}
+		if ${This.InvName.NotNULLOrEmpty} && (!${SuppressNameOnly} || ${EVEWindowParams.NotNULLOrEmpty})
 		{
 			if ${EVEWindowParams.NotNULLOrEmpty}
 			{
@@ -68,45 +94,89 @@ objectdef obj_EVEWindow_Proxy
 
 	member:string GetFallthroughObject()
 	{
+		This:SetFallThroughParams[]
 		return "EVEWindow[Inventory].ChildWindow[${EVEWindowParams}]"
+	}
+
+	member:bool HasValidWindowParams()
+	{
+		This:SetFallThroughParams[]
+		if ${EVEWindowParams.NotNULLOrEmpty}
+		{
+			return TRUE
+		}
+
+		return FALSE
 	}
 
 	member:float Capacity()
 	{
-		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.MakeActiveSettleMS}]}
+		if !${This.HasValidWindowParams}
 		{
 			return -1
 		}
 
-		if ${Inventory.IsSettling}
+		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.CapacityReadSettleMS}]}
 		{
 			return -1
 		}
 
-		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + 5000]}
-		{
-			echo "EVEBOT_INV_DIAG Capacity read object=${This.ObjectName} age=${Math.Calc[${Script.RunningTime} - ${This.LastMakeActiveAt}]} running=${Script.RunningTime}"
-		}
 		return ${${This.GetFallthroughObject}.Capacity}
 	}
 
 	member:float UsedCapacity()
 	{
-		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.MakeActiveSettleMS}]}
+		if !${This.HasValidWindowParams}
 		{
 			return -1
 		}
 
-		if ${Inventory.IsSettling}
+		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.CapacityReadSettleMS}]}
 		{
 			return -1
 		}
 
-		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + 5000]}
-		{
-			echo "EVEBOT_INV_DIAG UsedCapacity read object=${This.ObjectName} age=${Math.Calc[${Script.RunningTime} - ${This.LastMakeActiveAt}]} running=${Script.RunningTime}"
-		}
 		return ${${This.GetFallthroughObject}.UsedCapacity}
+	}
+
+	member:int CapacityState()
+	{
+		variable float capacity
+		variable float usedCapacity
+
+		if !${This.HasValidWindowParams}
+		{
+			return 0
+		}
+
+		if !${${This.GetFallthroughObject}(exists)}
+		{
+			return 0
+		}
+
+		if ${This.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.LastMakeActiveAt} + ${This.CapacityReadSettleMS}]}
+		{
+			return 1
+		}
+
+		capacity:Set[${This.Capacity}]
+		usedCapacity:Set[${This.UsedCapacity}]
+		if ${capacity} >= 0 && ${usedCapacity} >= 0
+		{
+			return 2
+		}
+
+		return 1
+	}
+
+	member:bool CapacityReady()
+	{
+		if ${This.CapacityState} == 2
+		{
+			return TRUE
+		}
+
+		return FALSE
 	}
 
 /*
@@ -114,8 +184,9 @@ objectdef obj_EVEWindow_Proxy
   ~ ChildWindow[ID#,"NAME"]              :: the child with the given ID# and the given "NAME" (PREFERRED)
   ~ ChildWindow[ID#,"NAME","LOCATION"]   :: the child with the given ID# and "NAME", at the given "LOCATION"
 
-	NOTE: The name-only patterns (ChildWindow["NAME"] and ChildWindow["NAME","LOCATION"]) are
-	DEPRECATED in ISXEVE and will cause console spam. Always include an ID#.
+	NOTE: Local ISXEVE docs still list name-only ChildWindow forms as supported, but
+	current runtime warnings can be triggered by scoped name-only access. Prefer ID+name
+	for ship, station, and entity scoped containers.
 
 	If ID is not specified, but Name is, MyShip.ID is assumed
 	Note that some window types REQUIRE an ID. These will cause an error message to be printed instead of defaulting to MyShip.ID
@@ -130,14 +201,56 @@ objectdef obj_EVEWindow_Proxy
 
 	function Activate(int64 _ID=-1, string _Location="")
 	{
+		variable bool IsShipScoped = FALSE
+		variable bool IsStationScoped = FALSE
+
 		if ${_Location.NotNULLOrEmpty}
 		{
 			This.InvLocation:Set[${_Location}]
 		}
 
+		if (${This.ObjectName.Equal[ShipCargo]} || ${This.ObjectName.Equal[ShipFleetHangar]} || ${This.ObjectName.Equal[ShipGeneralMiningHold]} || ${This.ObjectName.Equal[ShipDroneBay]}) && (${This.InvName.Equal[ShipCargo]} || ${This.InvName.Equal[ShipFleetHangar]} || ${This.InvName.Equal[ShipGeneralMiningHold]} || ${This.InvName.Equal[ShipDroneBay]})
+		{
+			IsShipScoped:Set[TRUE]
+		}
+		if ${This.InvName.Equal[StationItems]} || ${This.InvName.Equal[StructureItemHangar]} || ${This.InvName.Equal[StationShips]} || ${This.InvName.Equal[StructureShipHangar]} || ${This.InvName.Equal[StationCorpHangars]} || ${This.InvName.Equal[StationCorpDeliveries]}
+		{
+			IsStationScoped:Set[TRUE]
+		}
+
+		if ${This.ObjectName.Equal[EntityFleetHangar]} && ${_ID} <= 0
+		{
+			Logger:Log["Inventory.${This.ObjectName}: Entity ID Required for this container type", LOG_ERROR]
+			return FALSE
+		}
+		elseif ${IsShipScoped}
+		{
+			if ${MyShip.ID} <= 0
+			{
+				Logger:Log["Inventory.${This.ObjectName}: Active ship ID required for this container type", LOG_ERROR]
+				return FALSE
+			}
+
+			This.InvID:Set[${MyShip.ID}]
+		}
+		elseif ${IsStationScoped}
+		{
+			if ${Me.StationID} <= 0
+			{
+				Logger:Log["Inventory.${This.ObjectName}: Station ID required for this container type", LOG_ERROR]
+				return FALSE
+			}
+
+			This.InvID:Set[${Me.StationID}]
+		}
+		elseif ${_ID} != -1
+		{
+			This.InvID:Set[${_ID}]
+		}
+
 		if ${_ID} <= 0 && ${This.InvID} <= 0
 		{
-			if ${Inventory.IDRequired.Contains[${This.InvName}]}
+			if ${Inventory.IDRequired.Contains[${This.InvName}]} || ${Inventory.IDRequired.Contains[${This.ObjectName}]}
 			{
 				Logger:Log["Inventory.${This.ObjectName}: Station or Entity ID Required for this container type", LOG_ERROR]
 				return FALSE
@@ -148,11 +261,13 @@ objectdef obj_EVEWindow_Proxy
 				return FALSE
 			}
 
+			if ${MyShip.ID} <= 0
+			{
+				Logger:Log["Inventory.${This.ObjectName}: Active ship ID required for default inventory container", LOG_ERROR]
+				return FALSE
+			}
+
 			This.InvID:Set[${MyShip.ID}]
-		}
-		elseif ${_ID} != -1
-		{
-			This.InvID:Set[${_ID}]
 		}
 
 		if ${This.InvID} == -1
@@ -199,6 +314,11 @@ objectdef obj_EVEWindow_Proxy
 		}
 
 		This:SetFallThroughParams[]
+		if !${This.HasValidWindowParams}
+		{
+			Logger:Log["Inventory.${This.ObjectName}: Error: Invalid inventory child parameters", LOG_ERROR]
+			return FALSE
+		}
 
 		call Inventory.Open
 
@@ -220,25 +340,29 @@ objectdef obj_EVEWindow_Proxy
 			{
 				wait 23
 			}
+			Inventory.Current:SetReference[This]
 			return TRUE
 		}
 		Logger:Log["\arInventory.${This.ObjectName}: Attempting ${This.GetFallthroughObject}", LOG_STANDARD]
-		echo "EVEBOT_INV_DIAG MakeActive before object=${This.ObjectName} target=${This.GetFallthroughObject} running=${Script.RunningTime}"
 
 		Inventory.${This.ObjectName}:MakeActive
 		LastMakeActiveAt:Set[${Script.RunningTime}]
-		echo "EVEBOT_INV_DIAG MakeActive after object=${This.ObjectName} last=${This.LastMakeActiveAt} running=${Script.RunningTime}"
 		; Wait after MakeActive before touching capacity or StackAll; ISXEVE rejects early inventory access.
 		wait 23
 		Inventory.Current:SetReference[This]
-		echo "EVEBOT_INV_DIAG MakeActive current object=${This.ObjectName} trusted=TRUE age=${Math.Calc[${Script.RunningTime} - ${This.LastMakeActiveAt}]} running=${Script.RunningTime}"
 		return TRUE
 	}
 
 	; Check that the ID/Name/Location match the current ActiveChild of the Inventory window
 	member:bool IsActive()
 	{
-		if ${This.InvID} != ${EVEWindow[Inventory].ActiveChild.ItemID}
+		if !${This.HasValidWindowParams}
+		{
+			return FALSE
+		}
+
+		This:SetFallThroughParams[]
+		if ${This.EffectiveInvID} != ${EVEWindow[Inventory].ActiveChild.ItemID}
 		{
 			;Logger:Log["\arInventory.${This.ObjectName}.IsActive: ID: ${This.InvID} != ${EVEWindow[Inventory].ActiveChild.ItemID}", LOG_DEBUG]
 			return FALSE
@@ -265,13 +389,15 @@ objectdef obj_EVEWindow_Proxy
 			return FALSE
 		}
 
-		if ${This.InvName.NotNULLOrEmpty} && ${This.InvID} <= 0
+		if !${This.HasValidWindowParams}
 		{
 			return FALSE
 		}
 
+		This:SetFallThroughParams[]
+
 		; Check that the fallthruobject ItemId/Name match what we're expectivng
-		if ${MyThis.ItemID} == ${This.InvID} && ${MyThis.Name.Equal[${This.InvName}]}
+		if ${MyThis.ItemID} == ${This.EffectiveInvID} && ${MyThis.Name.Equal[${This.InvName}]}
 		{
 			return TRUE
 		}
@@ -402,22 +528,22 @@ objectdef obj_Inventory inherits obj_BaseClass
 
 	member:bool IsSettling()
 	{
-		if ${This.ShipCargo.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipCargo.LastMakeActiveAt} + ${This.ShipCargo.MakeActiveSettleMS}]}
+		if ${This.ShipCargo.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipCargo.LastMakeActiveAt} + ${This.ShipCargo.CapacityReadSettleMS}]}
 		{
 			return TRUE
 		}
 
-		if ${This.ShipFleetHangar.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipFleetHangar.LastMakeActiveAt} + ${This.ShipFleetHangar.MakeActiveSettleMS}]}
+		if ${This.ShipFleetHangar.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipFleetHangar.LastMakeActiveAt} + ${This.ShipFleetHangar.CapacityReadSettleMS}]}
 		{
 			return TRUE
 		}
 
-		if ${This.ShipGeneralMiningHold.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipGeneralMiningHold.LastMakeActiveAt} + ${This.ShipGeneralMiningHold.MakeActiveSettleMS}]}
+		if ${This.ShipGeneralMiningHold.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.ShipGeneralMiningHold.LastMakeActiveAt} + ${This.ShipGeneralMiningHold.CapacityReadSettleMS}]}
 		{
 			return TRUE
 		}
 
-		if ${This.EntityFleetHangar.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.EntityFleetHangar.LastMakeActiveAt} + ${This.EntityFleetHangar.MakeActiveSettleMS}]}
+		if ${This.EntityFleetHangar.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${This.EntityFleetHangar.LastMakeActiveAt} + ${This.EntityFleetHangar.CapacityReadSettleMS}]}
 		{
 			return TRUE
 		}

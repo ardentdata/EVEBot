@@ -17,6 +17,7 @@ objectdef obj_Ship
 	variable bool CargoIsOpen
 	variable int RetryUpdateModuleList
 	variable int LastFuelBayMakeActiveAt = 0
+	variable int FuelBayCapacityReadSettleMS = 5000
 	variable index:module ModuleList
 	variable index:module ModuleList_ShieldTransporters
 	variable index:module ModuleList_MiningLaser
@@ -418,19 +419,27 @@ objectdef obj_Ship
 		if ${WindowName.Equal[""]}
 		{
 			Logger:Log["FuelBay child window does not exist after opening inventory", LOG_DEBUG]
-			return
+			return FALSE
 		}
 
 		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}](exists)}
 		{
+			if ${EVEWindow[Inventory].ActiveChild.ItemID} == ${MyShip.ID} && ${EVEWindow[Inventory].ActiveChild.Name.Equal[${WindowName}]}
+			{
+				return TRUE
+			}
+
 			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}]:MakeActive
 			LastFuelBayMakeActiveAt:Set[${Script.RunningTime}]
-			wait 10
+			wait 23
+			return TRUE
 		}
 		else
 		{
 			Logger:Log["FuelBay child window does not exist: ${WindowName}", LOG_DEBUG]
 		}
+
+		return FALSE
 	}
 
 	member:float OreHoldMinimumFreeSpace()
@@ -471,22 +480,7 @@ objectdef obj_Ship
 
 	member:bool OreHoldCapacityReady()
 	{
-		if ${Inventory.IsSettling}
-		{
-			return FALSE
-		}
-
-		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipGeneralMiningHold](exists)}
-		{
-			return FALSE
-		}
-
-		if ${Inventory.ShipGeneralMiningHold.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${Inventory.ShipGeneralMiningHold.LastMakeActiveAt} + ${Inventory.ShipGeneralMiningHold.MakeActiveSettleMS}]}
-		{
-			return FALSE
-		}
-
-		return TRUE
+		return ${Inventory.ShipGeneralMiningHold.CapacityReady}
 	}
 
 	member:bool OreHoldFull()
@@ -545,21 +539,21 @@ objectdef obj_Ship
 		return FALSE
 	}
 
+	member:bool CorpHangarCapacityReady()
+	{
+		return ${Inventory.ShipFleetHangar.CapacityReady}
+	}
+
 	member:float CorpHangarMinimumFreeSpace()
 	{
 		variable float FleetHangarCapacity
 
-		if ${Inventory.IsSettling}
+		if !${This.CorpHangarCapacityReady}
 		{
 			return 0
 		}
 
 		FleetHangarCapacity:Set[${Inventory.ShipFleetHangar.Capacity}]
-		if ${FleetHangarCapacity} <= 0
-		{
-			return 0
-		}
-
 		return ${Math.Calc[${FleetHangarCapacity} * 0.02]}
 	}
 
@@ -568,18 +562,13 @@ objectdef obj_Ship
 		variable float FleetHangarCapacity
 		variable float FleetHangarUsedCapacity
 
-		if ${Inventory.IsSettling}
+		if !${This.CorpHangarCapacityReady}
 		{
 			return -1
 		}
 
 		FleetHangarCapacity:Set[${Inventory.ShipFleetHangar.Capacity}]
 		FleetHangarUsedCapacity:Set[${Inventory.ShipFleetHangar.UsedCapacity}]
-		if ${FleetHangarCapacity} < 0 || ${FleetHangarUsedCapacity} < 0
-		{
-			return -1
-		}
-
 		return ${Math.Calc[${FleetHangarCapacity} - ${FleetHangarUsedCapacity}]}
 	}
 
@@ -624,12 +613,12 @@ objectdef obj_Ship
 	{
 		variable float FleetHangarUsedCapacity
 
-		if ${Inventory.IsSettling}
+		This:OpenCorpHangars
+
+		if !${This.CorpHangarCapacityReady}
 		{
 			return FALSE
 		}
-
-		This:OpenCorpHangars
 
 		FleetHangarUsedCapacity:Set[${Inventory.ShipFleetHangar.UsedCapacity}]
 		if ${FleetHangarUsedCapacity} == 0
@@ -677,22 +666,7 @@ objectdef obj_Ship
 
 	member:bool CargoCapacityReady()
 	{
-		if ${Inventory.IsSettling}
-		{
-			return FALSE
-		}
-
-		if !${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo](exists)}
-		{
-			return FALSE
-		}
-
-		if ${Inventory.ShipCargo.LastMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${Inventory.ShipCargo.LastMakeActiveAt} + ${Inventory.ShipCargo.MakeActiveSettleMS}]}
-		{
-			return FALSE
-		}
-
-		return TRUE
+		return ${Inventory.ShipCargo.CapacityReady}
 	}
 
 	member:bool FuelBayExists()
@@ -733,9 +707,9 @@ objectdef obj_Ship
 
 	member:float FuelBayCapacity()
 	{
-		if ${Inventory.IsSettling}
+		if ${LastFuelBayMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${LastFuelBayMakeActiveAt} + ${FuelBayCapacityReadSettleMS}]}
 		{
-			return 0
+			return -1
 		}
 
 		if !${This.FuelBayExists}
@@ -748,9 +722,9 @@ objectdef obj_Ship
 
 	member:float FuelBayUsedCapacity()
 	{
-		if ${Inventory.IsSettling}
+		if ${LastFuelBayMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${LastFuelBayMakeActiveAt} + ${FuelBayCapacityReadSettleMS}]}
 		{
-			return 0
+			return -1
 		}
 
 		if !${This.FuelBayExists}
@@ -761,31 +735,74 @@ objectdef obj_Ship
 		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ${WindowName}].UsedCapacity}
 	}
 
+	member:bool FuelBayCapacityReady()
+	{
+		variable float capacity
+		variable float usedCapacity
+
+		if !${This.FuelBayExists}
+		{
+			return FALSE
+		}
+
+		if ${LastFuelBayMakeActiveAt} > 0 && ${Script.RunningTime} < ${Math.Calc[${LastFuelBayMakeActiveAt} + ${FuelBayCapacityReadSettleMS}]}
+		{
+			return FALSE
+		}
+
+		capacity:Set[${This.FuelBayCapacity}]
+		usedCapacity:Set[${This.FuelBayUsedCapacity}]
+		if ${capacity} >= 0 && ${usedCapacity} >= 0
+		{
+			return TRUE
+		}
+
+		return FALSE
+	}
+
 	member:float FuelBayFreeSpace()
 	{
+		if !${This.FuelBayCapacityReady}
+		{
+			return -1
+		}
+
 		variable float capacity = ${This.FuelBayCapacity}
 		if ${capacity} <= 0
 		{
 			return 0
 		}
-		return ${Math.Calc[${capacity} - ${This.FuelBayUsedCapacity}]}
+
+		variable float usedCapacity = ${This.FuelBayUsedCapacity}
+		if ${usedCapacity} < 0
+		{
+			return 0
+		}
+
+		return ${Math.Calc[${capacity} - ${usedCapacity}]}
 	}
 
 	member:bool FuelBayBelowHalf()
 	{
-		; Check if capacity values are valid (not negative)
-		variable float capacity = ${This.FuelBayCapacity}
-		variable float usedCapacity = ${This.FuelBayUsedCapacity}
+		if !${This.FuelBayCapacityReady}
+		{
+			return FALSE
+		}
 
-		if ${capacity} <= 0 || ${usedCapacity} < 0
+		variable float capacity = ${This.FuelBayCapacity}
+		if ${capacity} <= 0
 		{
 			; Invalid capacity data - window probably not activated yet
 			return FALSE
 		}
 
-		variable float UsedPct = ${Math.Calc[${usedCapacity} / ${capacity} * 100]}
+		variable float usedCapacity = ${This.FuelBayUsedCapacity}
+		if ${usedCapacity} < 0
+		{
+			return FALSE
+		}
 
-		if ${UsedPct} < 50
+		if ${usedCapacity} < ${Math.Calc[${capacity} * 0.50]}
 		{
 			return TRUE
 		}
@@ -794,13 +811,21 @@ objectdef obj_Ship
 
 	member:bool FuelBayEmpty()
 	{
-		; Check if capacity values are valid (not negative)
-		variable float capacity = ${This.FuelBayCapacity}
-		variable float usedCapacity = ${This.FuelBayUsedCapacity}
+		if !${This.FuelBayCapacityReady}
+		{
+			return FALSE
+		}
 
-		if ${capacity} <= 0 || ${usedCapacity} < 0
+		variable float capacity = ${This.FuelBayCapacity}
+		if ${capacity} <= 0
 		{
 			; Invalid capacity data - window probably not activated yet
+			return FALSE
+		}
+
+		variable float usedCapacity = ${This.FuelBayUsedCapacity}
+		if ${usedCapacity} < 0
+		{
 			return FALSE
 		}
 
